@@ -28,7 +28,9 @@ SECRET_KEY = 'django-insecure-+upqh5$9bwjliylvmte%6$8g(8@=#=_*%k)$1c4%$443@hafu(
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-
+CSRF_TRUSTED_ORIGINS = [
+    "https://fitness-pugn.onrender.com",
+]
 
 # Application definition
 

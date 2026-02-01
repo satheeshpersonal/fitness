@@ -50,13 +50,15 @@ class GymAccessView(APIView):
                 # print(gym_access.gym.gym_id == uuid.UUID(request_data["gym_id"]))
                 if gym_access.device_id == request_data["device_id"] and gym_access.gym.gym_id  == uuid.UUID(request_data["gym_id"]):  # if user try with same gym with in 30 minutes and same device- we are showing seccess message
                     gym_accessa_data = GymAccessLogSerializer(gym_access).data
+                    workout_schedule_id = create_workout(user_data, None, gym_accessa_data)
+                    gym_accessa_data["workout_schedule_id"] = workout_schedule_id
                     success_data =  success_response(message="Successfully accessed", code="success", data=gym_accessa_data)
                     return Response(success_data, status=200) 
                 else: # if user try with diffrent gym or same gym with diffent device with in 30 minutes or diffrent device 
-                    error_data =  error_response(message="your today session already taken same time from other gym or device, Please contact support for more detials", code="not_found", data={})
+                    error_data =  error_response(message="Your session for today has already been used at the same time from another gym or device. Please contact support for further assistance.", code="not_found", data={})
                     return Response(error_data, status=200)
-            elif not request_data["second_session"]: #send confirmation popup message if same day second section 
-                error_data =  error_response(message="your today session already taken same time from other gym or device, Please contact support for more detials", code="confirmation", data=request_data)
+            elif not request_data.get("second_session", False): #send confirmation popup message if same day second section 
+                error_data =  error_response(message="You’ve already used today’s session. Would you like to take one more?", code="confirmation", data=request_data)
                 return Response(error_data, status=200)
         
         if not gym_access or request_data["second_session"]:
@@ -64,7 +66,7 @@ class GymAccessView(APIView):
             sessions_left_value = UserSubscription.objects.filter(user=user_data, expire_on__gte=timezone.now().date(), is_active=True).first()
             if (sessions_left_value and sessions_left_value.sessions_left<=0) or not sessions_left_value: 
                 # print(sessions_left_value["sessions_left"])
-                error_data =  error_response(message="Please enroll class to continue your workout", code="not_found", data={})
+                error_data =  error_response(message="Please enroll class to continue your workout", code="no_session", data={})
                 return Response(error_data, status=200) 
                 
             print(sessions_left_value.sessions_left)
@@ -95,10 +97,27 @@ class GymAccessView(APIView):
         
         error_data =  error_response(message="No plans available, Please select valid plan", code="not_found", data={})
         return Response(error_data, status=200) 
-    
 
+class GymAccessDetailsView(APIView):
+    """
+    Handles both POST (create) and PATCH (partial update) for CustomUser
+    """
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
-class ScheduleView(APIView):
+    def get(self, request, id):
+        # print(request.data)
+        user_data = request.user
+        gym_access = GymAccessLog.objects.filter(user = user_data, gym_access_id=id).first()
+        if gym_access:
+            gym_accessa_data = GymAccessLogSerializer(gym_access).data
+            success_data =  success_response(message="Success", code="success", data=gym_accessa_data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="No data found", code="not_found", data={})
+            return Response(error_data, status=200) 
+
+class ScheduleListView(APIView):
     """
     Handles both POST (create) and PATCH (partial update) for CustomUser
     """
@@ -119,7 +138,33 @@ class ScheduleView(APIView):
             return Response(success_data, status=200)
         else:
             error_data =  error_response(message="No data found", code="not_found", data={})
-            return Response(error_data, status=200) 
+            return Response(error_data, status=200)
+        
+
+class ScheduleView(APIView):
+    """
+    Handles both POST (create) and PATCH (partial update) for CustomUser
+    """
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+        
+    def get(self, request, pk):
+        # print(request.data)
+        user_data = request.user
+        workout_data = WorkoutSchedule.objects.filter(pk=pk, user=user_data).first()
+        
+        if workout_data:
+            serializer = WorkoutScheduleSerializer(workout_data)
+            workout_schedule_data = serializer.data
+            
+            #get all exercise
+            exercise_data_all = WorkoutExercise.objects.filter(workout_schedule=workout_data.id, status = 'A').order_by("created_at")
+            workout_schedule_data['exercise'] = WorkoutExerciseSerializer(exercise_data_all, many=True).data
+            success_data =  success_response(message="Successfully updated", code="success", data=workout_schedule_data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="WorkoutSchedule not found.", code="serializer", data={})
+            return Response(error_data, status=200)
 
         
     def post(self, request): #Register User
@@ -167,6 +212,10 @@ class ScheduleView(APIView):
                     exercise_serializer = WorkoutExerciseSerializer(data=exercise)
                     if exercise_serializer.is_valid():
                         exercise_serializer.save()
+                    else:
+                        # print("serializer errors ----- ", exercise_serializer.errors)
+                        error_data =  error_response(message=exercise_serializer.errors, code="serializer", data={})
+                        return Response(error_data, status=200)
             #get all exercise
             exercise_data_all = WorkoutExercise.objects.filter(workout_schedule=instance.id, status = 'A').order_by("created_at")
             workout_schedule_data['exercise'] = WorkoutExerciseSerializer(exercise_data_all, many=True).data
@@ -174,7 +223,7 @@ class ScheduleView(APIView):
             return Response(success_data, status=200)
         else:
             error_data =  error_response(message=serializer.errors, code="serializer", data={})
-            return Response(error_data, status=200) 
+            return Response(error_data, status=200)
 
     def delete(self, request, pk):
         user_data = request.user
@@ -185,4 +234,5 @@ class ScheduleView(APIView):
             return Response(success_data, status=200)
         else:
             error_data =  error_response(message="WorkoutSchedule not found.", code="serializer", data={})
+            return Response(error_data, status=200)
               

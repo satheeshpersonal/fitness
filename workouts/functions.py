@@ -18,18 +18,20 @@ def create_workout(user, workout_data, gym_access_data):
         # WorkoutScheduleSerializer(workout_schedule_data, )
         pass
     elif gym_access_data:
-        workout_schedule_data = WorkoutSchedule.objects.filter(user = user, scheduled_at__date = timezone.now().date(), gym__isnull = True).order_by("scheduled_at").first()
-        print("gym_access_data - ", gym_access_data)
+        workout_schedule_data = WorkoutSchedule.objects.filter(user = user, gym_access_id = gym_access_data["id"]).order_by("scheduled_at").first()
+        if not workout_schedule_data:
+            workout_schedule_data = WorkoutSchedule.objects.filter(user = user, scheduled_at__date = timezone.now().date(), gym_access_id__isnull = True).order_by("scheduled_at").first()
         if workout_schedule_data:
-            workout_schedule_data.gym_id = gym_access_data["gym"]
+            workout_schedule_data.gym_id = gym_access_data["gym"]["id"]
             workout_schedule_data.gym_access_id = gym_access_data["id"]
             workout_schedule_data.save(update_fields=["gym_id", "gym_access_id"])
             return workout_schedule_data.id
         else:
-            workout_schedule = {"user":user.id, "gym":gym_access_data["gym"], "gym_access":gym_access_data["id"] }
+            workout_schedule = {"user":user.id, "gym":gym_access_data["gym"]["id"], "gym_access":gym_access_data["id"] }
             serializer = WorkoutScheduleSerializer(data = workout_schedule)
             if serializer.is_valid():
                 workout_schedule_data = serializer.save()
+                # print("workout_schedule_data -", workout_schedule_data.id)
                 return workout_schedule_data.id
             else:
                 print("Error in create_workout is", serializer.errors)

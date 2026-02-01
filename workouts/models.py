@@ -45,6 +45,7 @@ class WorkoutSchedule(models.Model):
     burned_calories = models.IntegerField(null=True, blank=True)  # for full session
     heart_rate = models.IntegerField(null=True, blank=True)  # for full session - Maimum
     scheduled_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
+    reminder = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

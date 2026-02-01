@@ -4,6 +4,8 @@ from django.utils import timezone
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 import uuid
+import random
+import string
 from .functions import update_user_session
 
 # Create your models here.
@@ -41,6 +43,7 @@ class SubscriptionPlan(models.Model):
     plan_type = models.CharField(max_length=2, choices=PLAN_TYPE_CHOICES, default='M')
     session_count = models.IntegerField(default=0)
     price = models.DecimalField(max_digits=8, decimal_places=2)
+    price_discount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='INR')
     duration_in_days = models.IntegerField(null=True, blank=True)  # useful for weekly/monthly/yearly plans
     premim_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
@@ -60,6 +63,22 @@ class PlanDetails(models.Model):
 
     def __str__(self):
         return f"{self.details}"
+    class Meta:
+        ordering = ['position']   # 👈 default order
+
+
+class DicountCoupon(models.Model):
+
+    def generate_coupon_code():
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    coupon_code = models.CharField(max_length = 8, unique=True, default=generate_coupon_code)
+    percentage = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.coupon_code}"
     
 
 class UserSubscription(models.Model):
@@ -81,8 +100,15 @@ class UserSubscriptionHistory(models.Model):
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE)
     per_session_price = models.DecimalField(max_digits=8, decimal_places=2)
     total_session_price = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    
     discount_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    discount_percent = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    coupon = models.CharField(max_length=50, blank=True, null=True)
+    coupon_discount_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    coupon_discount_percent = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+
     tax = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    tax_percent = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     total_paid = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='INR')
     sessions_count = models.IntegerField(null=True, blank=True)
@@ -91,6 +117,12 @@ class UserSubscriptionHistory(models.Model):
     payment_status = models.CharField(max_length=2, choices=PAYMENT_STATUS_CHOICES, default='P')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    razorpay_order_id = models.CharField(max_length=255, blank=True, null=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=200, blank=True, null=True)
+    
+    error_code = models.CharField(max_length=255, blank=True, null=True)
+    error_description = models.CharField(max_length=500, blank=True, null=True)
     # def save(self, *args, **kwargs):
     #     if not self.order_id:
     #         date_str = timezone.now().strftime('%Y%m%d')

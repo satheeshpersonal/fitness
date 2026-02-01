@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SubscriptionPlan, PlanDetails, UserSubscription, UserSubscriptionHistory
+from .models import SubscriptionPlan, PlanDetails, UserSubscription, UserSubscriptionHistory, DicountCoupon
 
 # Register your models here.
 
@@ -112,6 +112,24 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
     )
 
 
+# gym Review
+class DicountCouponAdmin(admin.ModelAdmin):
+    # list_display_links = None
+    list_display = (
+        'coupon_code',
+        'percentage',
+        'status',
+    )
+
+    # Make fields searchable
+    search_fields = ('coupon_code',)
+    list_filter = ('status',)
+
+    # list_editable = ('status',)
+    ordering = ('-created_at',)
+
+
 admin.site.register(SubscriptionPlan, SubscriptionPlanAdmin)
 admin.site.register(UserSubscriptionHistory, UserSubscriptionHistoryAdmin)
 admin.site.register(UserSubscription, UserSubscriptionAdmin)
+admin.site.register(DicountCoupon, DicountCouponAdmin)

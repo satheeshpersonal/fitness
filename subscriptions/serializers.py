@@ -9,7 +9,7 @@ class SubscriptionHistorySerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data['plan'] = instance.plan.name
+        data['plan'] = {"id": instance.plan.id, "name": instance.plan.name, "plan_type":instance.plan.plan_type}
         data['premim_type'] = {"code": instance.plan.premim_type, "value":instance.plan.get_premim_type_display()}
 
         return data
@@ -46,5 +46,6 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         # data['details'] = PlanDetailsSerializer(instance.plan_details.all(), many=True).data
+        data["price"] = format(instance.price.normalize(), 'f')
 
         return data

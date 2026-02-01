@@ -1,11 +1,11 @@
 from rest_framework import serializers
-from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview
+from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite
 from lookups.models import GymFeature
 
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'ip_country', 'ip_state', 'ip_city', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', ]
+        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender']
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -102,11 +102,12 @@ class GymListSerializer(serializers.ModelSerializer):
     gymowner = serializers.SerializerMethodField()
     distance = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
+    favorites = serializers.SerializerMethodField()
     # distance_km = serializers.SerializerMethodField()
 
     class Meta:
         model = Gym
-        fields = ['id', 'gym_id', 'name', 'description', 'address', 'city', 'state', 'premium_type', 'media', 'feature', 'gymowner', 'distance', 'rating']
+        fields = ['id', 'gym_id', 'name', 'description', 'address', 'city', 'state', 'premium_type', 'media', 'feature', 'gymowner', 'distance', 'rating', 'favorites']
 
     def get_media(self, obj):
         return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
@@ -129,6 +130,14 @@ class GymListSerializer(serializers.ModelSerializer):
 
         return {"average":0, "total":0}
     
+    def get_favorites(self, obj):
+        user = self.context.get("user")
+        print("user - ", user)
+        if not user or not user.is_authenticated:
+            return False
+
+        return GymFavorite.objects.filter(user=user,gym=obj).exists()
+    
 
 class UserDetailsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -145,6 +154,10 @@ class GymReviewSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['user'] = UserDetailsSerializer(instance.user).data
-
-
         return data
+    
+class GymFavoriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GymFavorite
+        fields = '__all__'
+        read_only_fields = ['created_at']

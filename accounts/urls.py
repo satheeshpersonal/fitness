@@ -1,6 +1,6 @@
 
 from django.urls import path
-from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView
+from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView, FavoritesGymView
 
 urlpatterns = [
     path('/', CustomUserView.as_view(), name='user-data'),       # GET, POST & PATCH
@@ -16,4 +16,6 @@ urlpatterns = [
 
     path('/review/', ReviewView.as_view(), name='user-dashboard-get'), #LIST, POST & PATCH
     path('/review-details/<id>/', ReviewDetailtView.as_view(), name='user-dashboard-get'), # GET
+
+    path('/favorites', FavoritesGymView.as_view(), name='favorites-gym'), # POST
 ]

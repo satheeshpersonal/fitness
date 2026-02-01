@@ -174,5 +174,5 @@ EMAIL_HOST_PASSWORD = config('APP_PASSWORD')     # see below about App Password
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 #Media setup
-MEDIA_URL = '/media/'
+# MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

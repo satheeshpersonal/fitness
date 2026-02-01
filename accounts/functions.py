@@ -13,13 +13,15 @@ def generte_top(user, login_type=None):
 
 def send_otp(mobile_number, email, otp_code, semding_type):
     if semding_type == 'M':
-        send_sms(otp_code, mobile_number) #send OTP to mobile number
+        # send_sms(otp_code, mobile_number) #send OTP to mobile number
+        pass
     else:
         send_template_email("OTP", f"OTP is {otp_code}", [email])
 
 
 def gym_response(gym):
     data = {}
+    data['id'] = gym.id
     data['gym_name'] = gym.name
     data['address'] = gym.address
     data['city'] = gym.city
@@ -30,6 +32,6 @@ def gym_response(gym):
 
     data['profile_icon'] = None
     if gym.profile_icon:
-        data['profile_icon'] = gym.profile_icon
+        data['profile_icon'] = gym.profile_icon.url
     
     return data

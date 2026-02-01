@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.utils.html import format_html
 
 # Register your models here.
 from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation
@@ -102,6 +103,7 @@ class GymAdmin(admin.ModelAdmin):
     )
 
 
+
 # gym Review
 class GymReviewAdmin(admin.ModelAdmin):
     # model = Gym
@@ -147,6 +149,3 @@ admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Gym, GymAdmin)
 admin.site.register(GymReview, GymReviewAdmin)
 admin.site.register(GymFavorite, GymFavoriteAdmin)
-
-
-

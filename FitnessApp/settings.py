@@ -29,7 +29,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
-    "https://fitness-pugn.onrender.com",
+    "https://fitness-pugn.onrender.com", "https://fitness-web-eta.vercel.app"
 ]
 
 # Application definition
@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
 
     'rest_framework',
     'rest_framework.authtoken',
@@ -54,6 +55,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -106,6 +108,8 @@ REST_FRAMEWORK = {
 #         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 DATABASES = {
     'default': {
@@ -169,6 +173,6 @@ EMAIL_HOST_USER = config('EMAIL_ADDRESS')       # replace with your Gmail addres
 EMAIL_HOST_PASSWORD = config('APP_PASSWORD')     # see below about App Password
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-#Media setupz
+#Media setup
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

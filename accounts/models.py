@@ -61,7 +61,7 @@ class CustomUser(AbstractUser):
     ip_state = models.CharField(max_length=100, null=True, blank=True)
     ip_city = models.CharField(max_length=100, null=True, blank=True)
     # profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/profile.png')
-    profile_icon = CloudinaryField('image', null=True, blank=True, default='/default/profile.png')
+    profile_icon = CloudinaryField('image', null=True, blank=True)
     weight = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     height = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     new_to_gym = models.CharField(max_length=2, choices=NEW_TYPE_CHOICES, default='N')
@@ -99,7 +99,7 @@ class Gym(models.Model):
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     # profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/gym_profile.png')
-    profile_icon = CloudinaryField('image', null=True, blank=True, default='/default/gym_profile.png')
+    profile_icon = CloudinaryField('image', null=True, blank=True)
     per_session_cost = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3,  choices=CURRENCY_CHOICES, default='INR')
     premium_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
@@ -147,7 +147,7 @@ class GymTiming(models.Model):
 class GymEquipment(models.Model):
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
     # icon = models.ImageField(upload_to='gym_images/equipment', null=True, blank=True, default='/default/gym_equipment.png')
-    icon = CloudinaryField('image', null=True, blank=True, default='/default/gym_equipment.png')
+    icon = CloudinaryField('image', null=True, blank=True)
     category = models.CharField(max_length=500, null=True, blank=True)
     description = models.TextField(null=True, blank=True)  # e.g., "20+ Latest Treadmills & Bikes"
     position = models.PositiveIntegerField(default=1)

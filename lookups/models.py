@@ -1,4 +1,5 @@
 from django.db import models
+from cloudinary.models import CloudinaryField
 
 # Create your models here.
 STATUS_CHOICES = [
@@ -45,7 +46,8 @@ class ExerciseName(models.Model):
 class GymFeature(models.Model):
 
     name = models.CharField(max_length=500)
-    icon = models.ImageField(upload_to='lookup/gym_feature/', null=True, blank=True, default='/default/feature_icon.png')
+    # icon = models.ImageField(upload_to='lookup/gym_feature/', null=True, blank=True, default='/default/feature_icon.png')
+    icon = CloudinaryField('image', null=True, blank=True, default='/default/feature_icon.png')
     details = models.CharField(max_length=500,  null=True, blank=True)
     position = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')

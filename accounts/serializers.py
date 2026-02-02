@@ -6,11 +6,15 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender']
+    
+    profile_icon = serializers.ImageField(use_url=True)
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed']
+
+    profile_icon = serializers.ImageField(use_url=True)
 
 
 class UserSelectLocationSerializer(serializers.ModelSerializer):
@@ -26,10 +30,14 @@ class GymMediaSerializer(serializers.ModelSerializer):
         model = GymMedia
         fields = ['name', 'media', 'description']
 
+    media = serializers.ImageField(use_url=True)
+
 class GymEquipmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = GymEquipment
         fields = ['category', 'description', 'icon']
+    
+    icon = serializers.ImageField(use_url=True)
 
 class GymFeatureSerializer(serializers.ModelSerializer):
     class Meta:
@@ -143,6 +151,8 @@ class UserDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name', 'last_name', 'mobile_number', 'profile_icon']
+    
+    profile_icon = serializers.ImageField(use_url=True)
 
 
 class GymReviewSerializer(serializers.ModelSerializer):

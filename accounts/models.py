@@ -5,6 +5,7 @@ import uuid
 from django.utils import timezone
 from datetime import timedelta
 from lookups.models import GymFeature
+from cloudinary.models import CloudinaryField
 
 # Create your models here.
 STATUS_CHOICES = [
@@ -59,7 +60,8 @@ class CustomUser(AbstractUser):
     ip_country = models.CharField(max_length=100, null=True, blank=True)
     ip_state = models.CharField(max_length=100, null=True, blank=True)
     ip_city = models.CharField(max_length=100, null=True, blank=True)
-    profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/profile.png')
+    # profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/profile.png')
+    profile_icon = CloudinaryField('image', null=True, blank=True, default='/default/profile.png')
     weight = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     height = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     new_to_gym = models.CharField(max_length=2, choices=NEW_TYPE_CHOICES, default='N')
@@ -96,7 +98,8 @@ class Gym(models.Model):
     zip_code = models.CharField(max_length=50, null=True, blank=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/gym_profile.png')
+    # profile_icon = models.ImageField(upload_to='gym_images/', null=True, blank=True, default='/default/gym_profile.png')
+    profile_icon = CloudinaryField('image', null=True, blank=True, default='/default/gym_profile.png')
     per_session_cost = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3,  choices=CURRENCY_CHOICES, default='INR')
     premium_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
@@ -115,7 +118,8 @@ class GymMedia(models.Model):
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    media = models.ImageField(upload_to='gym_images/', null=True, blank=True)
+    # media = models.ImageField(upload_to='gym_images/', null=True, blank=True)
+    media = CloudinaryField('image', null=True, blank=True)
     position = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -142,7 +146,8 @@ class GymTiming(models.Model):
 
 class GymEquipment(models.Model):
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
-    icon = models.ImageField(upload_to='gym_images/equipment', null=True, blank=True, default='/default/gym_equipment.png')
+    # icon = models.ImageField(upload_to='gym_images/equipment', null=True, blank=True, default='/default/gym_equipment.png')
+    icon = CloudinaryField('image', null=True, blank=True, default='/default/gym_equipment.png')
     category = models.CharField(max_length=500, null=True, blank=True)
     description = models.TextField(null=True, blank=True)  # e.g., "20+ Latest Treadmills & Bikes"
     position = models.PositiveIntegerField(default=1)

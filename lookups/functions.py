@@ -1,4 +1,5 @@
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, BadHeaderError
+import smtplib
 from decouple import config
 import requests
 
@@ -6,10 +7,22 @@ def send_email(subject, body, to_email, cc_email=None):
     email = EmailMessage(
         subject=subject,
         body=body,
-        from_email=config('EMAIL_ADDRESS'),
+        from_email=config('DEFAULT_FROM_EMAIL'),
         to=to_email,
     )
-    email.send()
+    # email.send()
+    try:
+        result = email.send(fail_silently=False)
+        if result == 1:
+            print("Email sent successfully ✅")
+        else:
+            print("Email not sent ❌")
+    except BadHeaderError as e:
+        print(f"Invalid header found: : {e}")
+    except smtplib.SMTPException as e:
+        print(f"SMTP error: {e}")
+    except Exception as e:
+        print(f"Other error: {e}")
 
 
 def send_sms(otp, to_number):

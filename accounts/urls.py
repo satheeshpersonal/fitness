@@ -1,6 +1,6 @@
 
 from django.urls import path
-from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView, FavoritesGymView
+from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView, FavoritesGymView, HealthCheckView
 
 urlpatterns = [
     path('/', CustomUserView.as_view(), name='user-data'),       # GET, POST & PATCH
@@ -18,4 +18,5 @@ urlpatterns = [
     path('/review-details/<id>/', ReviewDetailtView.as_view(), name='user-dashboard-get'), # GET
 
     path('/favorites', FavoritesGymView.as_view(), name='favorites-gym'), # POST
+    path('/health-check', HealthCheckView.as_view(), name='health-check'), # GET - check server hralth
 ]

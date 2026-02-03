@@ -91,7 +91,7 @@ def razorpay_creat_order(order_data):
     payment = client.order.create({
             "amount": int(order_data["total_paid"]* 100),
             "currency": order_data["currency"],
-            "payment_capture": 0
+            "payment_capture": 1
         })
     
     print(payment)

@@ -165,6 +165,7 @@ class RazorpayWebhook(APIView):
         # try:  
         if 1==1:      
             razorpay_event_data = verify_razorpay_event(request)
+            print("razorpay_event_data -- ", razorpay_event_data)
             if razorpay_event_data:
                 # Update order status
                 order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()

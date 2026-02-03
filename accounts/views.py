@@ -196,7 +196,7 @@ class SelectLocationView(APIView):
         data = request.data
         data["user"] = request.user.id
         
-        if data["id"] :
+        if data.get("id", None) :
             select_location = select_location = UserSelectLocation.objects.filter(id = data["id"]).first()
             serializer = UserSelectLocationSerializer(select_location, data={"status":"A"}, partial=True)
         else:
@@ -322,9 +322,10 @@ class DashboardView(APIView):
     def get(self, request):
         subscription_data = {}
         subscription_data = get_count_data(request.user.id)
+        print("subscription_data - ",subscription_data)
 
         subscription_data["activity_count"] = subscription_data.pop("session_count", 0)
-        subscription_data["expires_days"] = max((subscription_data["expire_on"] - date.today()).days, 0)
+        subscription_data["expires_days"] = max((subscription_data.get("expire_on", date.today()) - date.today()).days, 0)
 
         subscription_data["last_activity"] = get_last_activity(request.user.id)
 

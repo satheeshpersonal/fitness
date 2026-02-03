@@ -420,7 +420,7 @@ class FavoritesGymView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # try:
+        try:
             data = request.data
             user_data = request.user
             if data["action"] == "A":
@@ -439,7 +439,14 @@ class FavoritesGymView(APIView):
                     favorites_data.delete()
                     success_data =  success_response(message=f"Removed successfully", code="success", data={})
                 return Response(success_data, status=200)
-        # except Exception as e:
-        #     print("FavoritesGymView: ",e)
-        #     error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
-        #     return Response(error_data, status=200) 
+        except Exception as e:
+            print("FavoritesGymView: ",e)
+            error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
+            return Response(error_data, status=200) 
+
+
+class HealthCheckView(APIView):
+    def get(self, request):
+        success_data =  success_response(message=f"success", code="success", data={})
+        return Response(success_data, status=200)
+    

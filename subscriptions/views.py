@@ -53,7 +53,11 @@ class SubscriptionView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, payment_status__in = ['S', 'F']).order_by("-created_at")
+        page_type = self.request.query_params.get('page', 'L') # L - List, P - Profile (can send only 2)
+        if page_type == 'P':
+            subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, payment_status__in = 'S').order_by("-created_at")[0:2]
+        else:
+            subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, payment_status__in = ['S', 'F']).order_by("-created_at")
         subscription_history_data = SubscriptionHistorySerializer(subscription_history, many=True).data
         success_data =  success_response(message=f"success", code="success", data=subscription_history_data)
         return Response(success_data, status=200)

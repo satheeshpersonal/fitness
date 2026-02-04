@@ -12,7 +12,8 @@ def success_response(data={}, message="success", code="success", extra_data={}):
     }
 
 def error_response(message="Something went wrong", code="error", data={}):
-    message = next(iter(message.values()))[0]
+    if isinstance(message, dict):
+        message = next(iter(message.values()))[0]
     return {
         "status": "failure",
         "data": data,

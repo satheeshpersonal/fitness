@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/user', include('accounts.urls')),
     path('api/subscriptions', include('subscriptions.urls')),
     path('api/workout', include('workouts.urls')),
+    path('api/lookup', include('lookups.urls')),
 ]
 
 

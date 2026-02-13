@@ -286,6 +286,14 @@ class GymListView(APIView):
         # If request asks for favorite gyms only
         if data.get("favorite") == True and user_data !={}:
             gym_list = gym_list.filter(favorited_users__user=user_data)
+        
+        #if passing premium_type filter - plan
+        if data.get("type", None):
+            gym_list = gym_list.filter(premium_type=data["type"])
+
+        #if passing premium_type filter - plan
+        if data.get("search_text", None):
+            gym_list = gym_list.filter(name__icontains=data["search_text"])
 
         gym_with_distance = []
 

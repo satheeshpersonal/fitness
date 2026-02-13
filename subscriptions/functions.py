@@ -67,7 +67,7 @@ def get_subscription_data(user_data, plan_data, request_data):
 
 def get_count_data(user_id):
     from .models import UserSubscription
-    from workouts.models import WorkoutSchedule
+    from workouts.models import WorkoutSchedule, GymAccessLog
     
     try:
         user_subscription = UserSubscription.objects.filter(user=user_id, is_active=True).values('expire_on', 'sessions_left').first()
@@ -77,8 +77,9 @@ def get_count_data(user_id):
         else:
             user_subscription = {}
 
-        workout_count = WorkoutSchedule.objects.filter(user=user_id).count()
-        user_subscription["session_count"] = workout_count
+        # workout_count = WorkoutSchedule.objects.filter(user=user_id).count()
+        # user_subscription["session_count"] = workout_count
+        user_subscription["session_count"] = GymAccessLog.objects.filter(user=user_id).count()
         # print(user_subscription)
         return user_subscription
     except Exception as e:

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import WorkoutType
+from .models import WorkoutType, ExerciseName
 
 class WorkoutTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -14,3 +14,8 @@ class WorkoutTypeSerializer(serializers.ModelSerializer):
 #         data['premim_type'] = instance.plan.get_premim_type_display()
 
 #         return data
+
+class ExerciseNameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExerciseName
+        fields = ['id', 'name']

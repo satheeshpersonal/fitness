@@ -176,10 +176,25 @@ class ScheduleView(APIView):
             error_data =  error_response(message="Scheduled data is missing", code="missing_value", data={})
             return Response(error_data, status=200) 
         
+        exercise_all = request_data.pop("exercise")
         request_data["user"] = user_data.id
         serializer = WorkoutScheduleSerializer(data = request_data)
         if serializer.is_valid():
-            workout_schedule_data = serializer.save()
+            instance = serializer.save()
+            workout_schedule_data = serializer.data
+
+            for exercise in exercise_all: # add or update exercise data
+                exercise["workout_schedule"] = instance.id
+                exercise_serializer = WorkoutExerciseSerializer(data=exercise)
+                if exercise_serializer.is_valid():
+                    exercise_serializer.save()
+                else:
+                    error_data =  error_response(message=exercise_serializer.errors, code="serializer", data={})
+                    return Response(error_data, status=200)
+            
+            exercise_data_all = WorkoutExercise.objects.filter(workout_schedule=instance.id, status = 'A').order_by("created_at")
+            workout_schedule_data['exercise'] = WorkoutExerciseSerializer(exercise_data_all, many=True).data
+
             success_data =  success_response(message="Successfully scheduled workout", code="success", data=serializer.data)
             return Response(success_data, status=200)
         else:

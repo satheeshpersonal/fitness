@@ -3,6 +3,8 @@ from lookups.functions import send_sms, send_template_email
 import uuid
 from django.utils import timezone
 from datetime import timedelta
+from .serializers import ReferralSerializer
+from .models import Referral
 
 def generte_top(user, login_type=None):
     data = {}
@@ -35,3 +37,21 @@ def gym_response(gym):
         data['profile_icon'] = gym.profile_icon.url
     
     return data
+
+def referral_data_update(referral_data):
+    referral_data["reward_points"] = 0
+    referred_count = Referral.objects.filter(referrer = referral_data["referrer"], user_status="C").count()
+    if referred_count >= 2: #first 2 referral for free session
+        referral_data["reward_points"] = 50
+
+    referred_user = Referral.objects.filter(email = referral_data["email"])
+    if referred_user:
+        serializer = ReferralSerializer(referred_user, data=referral_data, partial=True)
+    else:
+        serializer = ReferralSerializer(data=referral_data)
+    
+    if serializer.is_valid():
+        instance = serializer.save()
+        print("instance -- ", instance)
+    else:
+        print("Error in referral flow - ", serializer.errors)

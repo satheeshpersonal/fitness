@@ -1,11 +1,11 @@
 from rest_framework import serializers
-from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite
+from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite, Referral
 from lookups.models import GymFeature
 
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender']
+        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'referral_code']
     
     profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
@@ -150,7 +150,7 @@ class GymListSerializer(serializers.ModelSerializer):
 class UserDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'first_name', 'last_name', 'mobile_number', 'profile_icon']
+        fields = ['id', 'first_name', 'last_name', 'mobile_number', 'profile_icon', 'email']
     
     profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
@@ -171,3 +171,21 @@ class GymFavoriteSerializer(serializers.ModelSerializer):
         model = GymFavorite
         fields = '__all__'
         read_only_fields = ['created_at']
+
+class ReferralSerializer(serializers.ModelSerializer):
+    user_status = serializers.SerializerMethodField()
+    user_data= serializers.SerializerMethodField()
+
+    class Meta:
+        model = Referral
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+    def get_user_status(self, obj):
+        return {
+            "code": obj.user_status,
+            "label": obj.get_user_status_display()
+        }
+    
+    def get_user_data(self, obj):
+        return UserDetailsSerializer(obj.referred_user).data

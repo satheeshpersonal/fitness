@@ -2,12 +2,12 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
-from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview
-from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer
+from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral
+from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
 from django.shortcuts import get_object_or_404
-from .functions import generte_top, send_otp, gym_response
+from .functions import generte_top, send_otp, gym_response, referral_data_update
 from django.db.models import Q
 from django.utils import timezone
 from FitnessApp.utils.response import success_response, error_response
@@ -16,7 +16,7 @@ from lookups.functions import send_template_email
 from geopy.distance import geodesic
 from subscriptions.functions import get_count_data
 from workouts.functions import get_last_activity
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Sum
 from datetime import date
 # Create your views here.
 
@@ -46,12 +46,13 @@ class CustomUserView(APIView):
         data = request.data
         mobile_number = data.get("mobile_number", None)
         email = data.get("email", None)
+        referral_code = data.pop("referral_code", None)
         message = ""
         
         if not mobile_number and not email:
             print("value missing")
             error_data =  error_response(message="User name is required to create user", code="user_name", data={})
-            return Response(error_data, status=200) 
+            return Response(error_data, status=200)
         
         if mobile_number:
             data["username"] = mobile_number 
@@ -61,6 +62,7 @@ class CustomUserView(APIView):
             data["username"] = email 
             data["login_type"] = "E" 
             message = "OTP triggered to your register email"
+
         
         #check user alredy exist
         user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False)).first()
@@ -79,6 +81,11 @@ class CustomUserView(APIView):
             # trigger OTP
             send_otp(mobile_number, email, otp_code, data["login_type"])
 
+            if referral_code: #refrel flow
+                referred_by = CustomUser.objects.filter(~Q(id=user_obj.id), referral_code=referral_code).first()
+                if referred_by:
+                    referral_data_update({"referrer":referred_by.id, "referred_user":user_obj.id, "referral_code":referral_code, "email":user_obj.email})
+                    
             success_data =  success_response(message=f"{message}, Please use to complete the register", code="success", data=data)
             return Response(success_data, status=200) 
             # return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -164,6 +171,20 @@ class verifyOTPView(APIView):
                 token = Token.objects.create(user=user_data)
                 user_details["token"]=token.key
                 user_details["full_name"] = user_details["first_name"]+" "+user_details["last_name"]
+
+                # check this user in referral program
+                referred_user = Referral.objects.filter(referred_user = user_data.id).first()
+                if referred_user:
+                    referral_data = {"user_status":"C"}
+                    referred_count = Referral.objects.filter(referrer = referred_user.referrer, user_status="C").count()
+                    if referred_count >= 2: #first 2 referral for free session
+                        referral_data["reward_points"] = 50
+
+                    serializer = ReferralSerializer(referred_user, data=referral_data, partial=True)
+                    if serializer.is_valid():
+                        instance = serializer.save()
+                    else:
+                        print("Error in referral update flow - ", serializer.errors)
 
                 success_data =  success_response(message=f"User account verified successfully", code="success", data=user_details)
                 return Response(success_data, status=200) 
@@ -458,3 +479,47 @@ class HealthCheckView(APIView):
         success_data =  success_response(message=f"success", code="success", data={})
         return Response(success_data, status=200)
     
+
+class ReferralView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        extra_data = {"total_referrals": 0, "total_reward_points": 0}
+        try:  
+            user_data = request.user
+            referral_data = Referral.objects.filter(referrer = user_data)
+            if referral_data:
+                aggregates = referral_data.aggregate(
+                    total_referrals=Count('id'),
+                    total_reward_points=Sum('reward_points')
+                )
+
+                extra_data = {"total_referrals": aggregates["total_referrals"], "total_reward_points": aggregates["total_reward_points"] or 0}
+            serializer_data = ReferralSerializer(referral_data, many=True).data
+            success_data =  success_response(message=f"success", code="success", data=serializer_data, extra_data = extra_data)
+            return Response(success_data, status=200)
+        except Exception as e:
+            print("Referral error: ",e)
+            error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
+            return Response(error_data, status=200)
+
+
+class ReferralCountView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    def get(self, request):
+        try:  
+            user_data = request.user
+            referral_data = Referral.objects.filter(referrer = user_data, user_status="C")
+
+            total_count = referral_data.count()
+            # total_reward_points = referral_data.aggregate(total_points=Sum('reward_points'))['total_points'] or 0
+            data = {"total_count":total_count
+                    # , "total_points":total_reward_points
+                    }
+            success_data =  success_response(message=f"success", code="success", data=data)
+            return Response(success_data, status=200)
+        except Exception as e:
+            print("Referral error: ",e)
+            error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
+            return Response(error_data, status=200)

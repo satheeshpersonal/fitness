@@ -47,6 +47,14 @@ DAYS_CHOICES = [
         ('SU', 'Sunday')
     ]
 
+REFER_USER_STATUS_CHOICES = [
+        ('P', 'Pending'),
+        ('C', 'Created')
+    ]
+
+def generate_referral_code():
+    return uuid.uuid4().hex[:10].upper()
+
 
 class CustomUser(AbstractUser):
     mobile_number = models.CharField(max_length=15, null=True, blank=True)
@@ -67,6 +75,7 @@ class CustomUser(AbstractUser):
     new_to_gym = models.CharField(max_length=2, choices=NEW_TYPE_CHOICES, default='N')
     profile_completed = models.BooleanField(default=False)
     login_type = models.CharField(max_length=2, choices=LOGIN_TYPE_CHOICES, default='M')
+    referral_code = models.CharField(max_length=12, unique=True, default=generate_referral_code)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='P')
     user_type = models.CharField(max_length=2, choices=USER_TYPE_CHOICES, default='U')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -197,4 +206,14 @@ class UserSelectLocation(models.Model):
     latitude = models.CharField(max_length=50, null=True, blank=True)
     longitude = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Referral(models.Model):
+    referrer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='referrals_made') #user id who reffer
+    referred_user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, null=True, blank=True, related_name='referrals_received') # new user from referral 
+    referral_code = models.CharField(max_length=12, null=True, blank=True, default="")
+    email = models.CharField(max_length=500, null=True, blank=True)
+    reward_points = models.DecimalField(max_digits=8, decimal_places=0, default=0)
+    user_status = models.CharField(max_length=2, choices=REFER_USER_STATUS_CHOICES, default='P')
     created_at = models.DateTimeField(auto_now_add=True)

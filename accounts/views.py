@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
-from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral
-from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer
+from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest
+from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
 from django.shortcuts import get_object_or_404
@@ -102,7 +102,7 @@ class CustomUserView(APIView):
         if hasattr(user_input_data, "_mutable") and not user_input_data._mutable and not request.FILES:
             user_input_data._mutable = True
 
-        required_fields = ['full_name', 'dob', 'gender', 'address']
+        required_fields = ['full_name']
         missing_fields = [field for field in required_fields if not user_input_data.get(field)]
         if missing_fields:
             error_data =  error_response(message=f"Missing or empty fields: {', '.join(missing_fields)}", code="success", data={})
@@ -255,7 +255,11 @@ class GymView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, gym_id):
-        gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
+        print(request.user.user_type)
+        if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"): #if Executive or Admin
+            gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
+        else:
+            gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
         if gym_data:
             data = GymDetailsSerializer(gym_data).data
             data["favorite"] = False
@@ -266,6 +270,82 @@ class GymView(APIView):
         else:
             error_data =  error_response(message="Gym data not found", code="not_found", data={})
             return Response(error_data, status=200)
+
+
+class GymCreateView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        gym_input_data = request.data
+        user_data = request.user
+        gym_id = gym_input_data.get("gym_id", None)
+        if not gym_id: #if create time
+            if user_data.user_type == "G": #if Gym owner
+                owner_data = request.user
+            elif user_data.user_type in ("E", "A"): #if Executive or Admin
+                data = {}
+                email = gym_input_data.get("owner_email")
+                mobile_number = gym_input_data.get("owner_mobile_number")
+                gym_user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False), user_type="G").first()
+                if gym_user_data:
+                    owner_data = gym_user_data
+                else:
+                    if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
+                        error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
+                        return Response(error_data, status=200)
+                
+                    if mobile_number:
+                        data["username"] = mobile_number 
+                        data["login_type"] = "M" 
+                    else:
+                        data["username"] = email 
+                        data["login_type"] = "E" 
+                    data["user_type"] = "G" 
+                    serializer = CustomUserSerializer(data=data)
+                    if serializer.is_valid():
+                        owner_data = serializer.save()
+                    else:
+                        print(serializer.errors)
+                        error_data =  error_response(message=serializer.errors, code="error", data={})
+                        return Response(error_data, status=200)
+                    
+            else:
+                error_data =  error_response(message="Invalid user type", code="error", data={})
+                return Response(error_data, status=200)
+        # print(gym_input_data)
+        if hasattr(gym_input_data, "_mutable") and not gym_input_data._mutable and not request.FILES:
+            gym_input_data._mutable = True
+            # print(gym_input_data)
+        
+        if gym_id:
+            gym_data = Gym.objects.filter(Q(created_by=user_data)|Q(owner=user_data), gym_id=gym_input_data.get("gym_id", None)).first()
+            if not gym_data:
+                error_data =  error_response(message="Invalid gym", code="error", data={})
+                return Response(error_data, status=200)
+            elif gym_data.status == 'A':
+                error_data =  error_response(message="Gym Already approved, Please contact admin to edit it.", code="error", data={})
+                return Response(error_data, status=200)
+            
+            # print(request.data.getlist('feature_ids'))
+            # serializer=GymCreateSerializer(gym_data, data = gym_input_data, partial=True, context={"user_data": user_data})
+            serializer = GymOptionsSerializer(instance=gym_data, data=request.data,context={'request': request}, partial=True)
+            
+        else:
+            # serializer=GymCreateSerializer(data=gym_input_data, context={"user_data": user_data})
+            serializer = GymOptionsSerializer(data=request.data,context={'request': request, 'owner_data': owner_data})
+        
+        if serializer.is_valid(raise_exception=True):
+            instance = serializer.save()
+            print("instance -- ", instance)
+            print("serializer.data -- ", serializer.data)
+            success_data =  success_response(message=f"success", code="success", data=serializer.data)   
+            return Response(success_data, status=200)
+        else:
+            print(serializer.errors)
+            error_data =  error_response(message=serializer.errors, code="error", data={})
+            return Response(error_data, status=200)
+
 
 
 class GymListView(APIView):
@@ -339,6 +419,37 @@ class GymListView(APIView):
         
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
         # print(serializer.data)
+        
+        success_data =  success_response(message=f"success", code="success", data=serializer.data)
+        return Response(success_data, status=200)
+    
+
+
+class OwnerGymListView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        offset = int(self.request.query_params.get('offset', 0))
+        limit = int(self.request.query_params.get('limit', 20))
+        data = request.data
+       
+        user_data = request.user
+
+        # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
+        gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data))
+
+        #if passing premium_type filter - plan
+        if data.get("search_text", None): 
+            gym_list = gym_list.filter(name__icontains=data["search_text"])
+
+        # Pagination
+        offset = int(request.GET.get('offset', 0))
+        limit = int(request.GET.get('limit', 20))
+        paginated = gym_list[offset:offset + limit]
+
+        
+        serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
         
         success_data =  success_response(message=f"success", code="success", data=serializer.data)
         return Response(success_data, status=200)
@@ -511,15 +622,41 @@ class ReferralCountView(APIView):
         try:  
             user_data = request.user
             referral_data = Referral.objects.filter(referrer = user_data, user_status="C")
-
             total_count = referral_data.count()
+
+            free_session_request = FreeSessionRequest.objects.filter(user = user_data).order_by("-created_at").first()
+
             # total_reward_points = referral_data.aggregate(total_points=Sum('reward_points'))['total_points'] or 0
             data = {"total_count":total_count
                     # , "total_points":total_reward_points
                     }
+            if free_session_request:
+                data["free_session_request"] = free_session_request.status
+
             success_data =  success_response(message=f"success", code="success", data=data)
             return Response(success_data, status=200)
         except Exception as e:
             print("Referral error: ",e)
             error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
             return Response(error_data, status=200)
+    
+class FreeSessionRequestView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request):
+        try:  
+            user_data = request.user
+            referral_count = Referral.objects.filter(referrer = user_data, user_status='C').count()
+            request_count = FreeSessionRequest.objects.filter(user=user_data, status='A').count()
+            if request_count <=0 and referral_count >=2:
+                FreeSessionRequest.objects.create(user=user_data)
+                success_data =  success_response(message=f"success", code="success", data={})
+                return Response(success_data, status=200)
+            else:
+                error_data =  error_response(message="Error in referral flow, Please contact admin", code="error", data={})
+                return Response(error_data, status=200)
+        except Exception as e:
+            print("Referral error: ",e)
+            error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
+            return Response(error_data, status=200)
+    

@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 
 # Register your models here.
-from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation
+from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest
 
 
 # Inline admin for user select locaiotn
@@ -16,6 +16,7 @@ class UserSelectLocationInline(admin.TabularInline):  # Or use admin.StackedInli
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
+    ordering = ('-created_at',)
     # inlines = [UserSelectLocationInline,]  # Add inline here
     # exclude_fields = ['password', 'last_login']  # fields to exclude
     list_display = (
@@ -24,11 +25,17 @@ class CustomUserAdmin(UserAdmin):
         'mobile_number', 
         'first_name', 
         'last_name', 
-        'is_staff',
         'user_type',
         'status',
         'created_at'
     )
+
+    list_filter = ('status', 'user_type',)
+
+    # list_editable = ('status', 'premium_type',)
+
+    # Make fields searchable
+    search_fields = ('username', 'mobile_number', 'email', 'first_name', 'last_name',)
 
 
 
@@ -59,23 +66,28 @@ class GymAdmin(admin.ModelAdmin):
     # Show these columns in the admin list view
     list_display = (
         'name', 
+        'address',
         'city', 
         'state', 
         'country', 
         'status', 
-        'currency',
+        'per_session_cost',
+        'premium_type',
         'owner',
         'verified_by',
+        'created_by',
         'created_at'
     )
 
     inlines = [GymMediaInline, GymTimingline, GymEquipmentline]  # Add inline here
 
     # Enable filters in the sidebar
-    list_filter = ('status', 'city', 'state', 'currency', 'verified_by')
+    list_filter = ('status', 'premium_type')
+
+    list_editable = ('status', 'premium_type')
 
     # Make fields searchable
-    search_fields = ('name', 'city', 'state', 'country', 'owner__email')
+    search_fields = ('name', 'city', 'state', 'country', 'owner__email', 'created_by__email')
 
     # Automatically set read-only fields
     readonly_fields = ('created_at', 'updated_at', 'gym_id')
@@ -143,9 +155,34 @@ class GymFavoriteAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
 
+# gym Review
+class FreeSessionRequestAdmin(admin.ModelAdmin):
+    list_display_links = None
+    list_display = (
+        'user__username',
+        'user__mobile_number',
+        'user__email',
+        'created_at',
+        'status'
+    )
+
+    # Make fields searchable
+    search_fields = ('user__username','user__mobile_number','user__email',)
+    list_filter = ('status',)
+
+    list_editable = ('status',)
+    ordering = ('-created_at',)
+
+    def save_model(self, request, obj, form, change):
+        obj.full_clean()   # 👈 This triggers clean()
+        super().save_model(request, obj, form, change)
 
 
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Gym, GymAdmin)
 admin.site.register(GymReview, GymReviewAdmin)
 admin.site.register(GymFavorite, GymFavoriteAdmin)
+admin.site.register(FreeSessionRequest, FreeSessionRequestAdmin)
+
+
+

@@ -4,6 +4,10 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models.signals import post_save, pre_save
+from django.dispatch import receiver
+from django.core.exceptions import ValidationError
+
 from lookups.models import GymFeature
 from cloudinary.models import CloudinaryField
 
@@ -26,8 +30,10 @@ PREMIUM_TYPE_CHOICES = [
     ]
 
 USER_TYPE_CHOICES = [
+        ('A', 'Admin'),
         ('U', 'User'),
-        ('G', 'Gym')
+        ('G', 'Gym'),
+        ('E', 'Executive')
     ]
 
 LOGIN_TYPE_CHOICES = [
@@ -51,6 +57,13 @@ REFER_USER_STATUS_CHOICES = [
         ('P', 'Pending'),
         ('C', 'Created')
     ]
+
+FREE_SESSION_STATUS_CHOICES = [
+        ('P', 'Pending'),
+        ('A', 'Approved'),
+        ('R', 'Rejected')
+    ]
+
 
 def generate_referral_code():
     return uuid.uuid4().hex[:10].upper()
@@ -84,6 +97,7 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return self.username
 
+
 class UserOTP(models.Model):  
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     otp = models.CharField(max_length=10)
@@ -113,9 +127,10 @@ class Gym(models.Model):
     currency = models.CharField(max_length=3,  choices=CURRENCY_CHOICES, default='INR')
     premium_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
     feature = models.ManyToManyField(GymFeature, null=True, blank=True) 
-    status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')
+    status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='P')
     verified_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, null=True, blank=True, related_name='verified_by')
     verified_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_by')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -134,6 +149,7 @@ class GymMedia(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class GymTiming(models.Model):
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
@@ -197,7 +213,6 @@ class GymReview(models.Model):
         return f"{self.user} - {self.gym.name} - {self.rating}"
     
 
-
 class UserSelectLocation(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     display_name = models.CharField(max_length=500, null=True, blank=True)
@@ -217,3 +232,21 @@ class Referral(models.Model):
     reward_points = models.DecimalField(max_digits=8, decimal_places=0, default=0)
     user_status = models.CharField(max_length=2, choices=REFER_USER_STATUS_CHOICES, default='P')
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class FreeSessionRequest(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    status = models.CharField(max_length=2, choices=FREE_SESSION_STATUS_CHOICES, default='P')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        from subscriptions.functions import redeem_free_session
+        if self.status == 'A':
+            redeem_data = redeem_free_session(self.user, {})    
+            if redeem_data.get("status") == "error":
+                raise ValidationError("Not match referral count or sessoon already redeem")
+        
+# def save_model(self, request, obj, form, change):
+#     obj.full_clean()  # triggers clean()
+#     super().save_model(request, obj, form, change)
+

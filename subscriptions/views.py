@@ -6,9 +6,9 @@ from FitnessApp.utils.response import success_response, error_response
 from django.utils import timezone
 from datetime import timedelta
 from decouple import config
-from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon
+from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription
 from .serializers import SubscriptionHistorySerializer, SubscriptionPlanSerializer
-from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event
+from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event, redeem_free_session
 # from django.views.decorators.csrf import csrf_exempt
 # Create your views here.
 
@@ -67,11 +67,16 @@ class SubscriptionView(APIView):
         request_data = request.data
         user_data = request.user
 
+        user_current_plan = UserSubscription.objects.select_related("plan").filter(user=user_data.id, is_active=True).order_by("-id").first()
+
         plan_data = SubscriptionPlan.objects.filter(id = request_data["plan"], status='A').first()
         if not plan_data:
             error_data =  error_response(message="No plans available, Please select valid plan", code="not_found", data={})
-            return Response(error_data, status=200) 
+            return Response(error_data, status=200)
         
+        if user_current_plan and user_current_plan.plan.premim_type != plan_data.premim_type:
+            error_data =  error_response(message="You have active sessions under a different membership type. Please complete them before switching plans or contact support.", code="not_found", data={})
+            return Response(error_data, status=200)
         # if plan_data.plan_type == "D":
         #     user_plan_data["sessions_count"] = request_data.get("sessions_count", 2)
         # else:
@@ -166,31 +171,77 @@ class SubscriptionDetailsView(APIView):
 # @csrf_exempt
 class RazorpayWebhook(APIView):
     def post(self, request): 
-        # try:  
-        if 1==1:      
-            razorpay_event_data = verify_razorpay_event(request)
-            print("razorpay_event_data -- ", razorpay_event_data)
-            if razorpay_event_data:
-                # Update order status
-                order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()
-                if order:
-                    order.razorpay_payment_id = razorpay_event_data["payment_id"]
+        try:  
+            if 1==1:      
+                razorpay_event_data = verify_razorpay_event(request)
+                print("razorpay_event_data -- ", razorpay_event_data)
+                if razorpay_event_data:
+                    # Update order status
+                    order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()
+                    if order:
+                        order.razorpay_payment_id = razorpay_event_data["payment_id"]
 
-                    if razorpay_event_data["event"] == 'payment.captured':
-                        order.payment_status = 'S'
-                    elif razorpay_event_data["event"] == 'payment.failed':
-                        order.payment_status = 'F'
-                        order.error_code = razorpay_event_data["error_code"]
-                        order.error_description = razorpay_event_data["error_description"]
+                        if razorpay_event_data["event"] == 'payment.captured':
+                            order.payment_status = 'S'
+                        elif razorpay_event_data["event"] == 'payment.failed':
+                            order.payment_status = 'F'
+                            order.error_code = razorpay_event_data["error_code"]
+                            order.error_description = razorpay_event_data["error_description"]
+                        
+                        order.save()
+                        # Add business logic here, e.g., send email
                     
-                    order.save()
-                    # Add business logic here, e.g., send email
-                
-            # Handle other events as needed, e.g., payment.failed
+                # Handle other events as needed, e.g., payment.failed
+                else:
+                    print("X-Razorpay-Signature not verified" )
         
-        # except Exception as e:
-        #     print("The razorpay_webhook error : ",e)
+        except Exception as e:
+            print("The razorpay_webhook error : ",e)
         
         success_data =  success_response(message=f"Webhook called successfully.", code="success", data={})
         return Response(success_data, status=200) 
         
+
+class RedeemFreeSessionView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request): #Register User
+        # print(request.data)
+        request_data = request.data
+        user_data = request.user
+        redeem_data = redeem_free_session(user_data, request_data)
+
+        if redeem_data["status"] == "success":
+            success_data =  success_response(message=redeem_data["message"], code=redeem_data["code"], data={})
+            return Response(success_data, status=200) 
+        else:
+            error_data =  error_response(message=redeem_data["message"], code=redeem_data["code"], data={})
+            return Response(error_data, status=200) 
+        
+
+        # plan_data = SubscriptionPlan.objects.filter(plan_type = 'D', status='A').first()
+        # if not plan_data:
+        #     error_data =  error_response(message="No plans available, Please select valid plan", code="not_found", data={})
+        #     return Response(error_data, status=200) 
+
+        # user_plan_data = get_subscription_data(user_data, plan_data, request_data) # get plan data with price calculation
+        # user_plan_data["per_session_price"] = 0
+        # user_plan_data["tax"] = 0
+        # user_plan_data["total_paid"] = 0
+        # user_plan_data["plan"] = plan_data.id
+        # user_plan_data["user"] = user_data.id
+        # user_plan_data["payment_status"] = 'S'
+
+        # # razorpay_order_id = razorpay_creat_order(user_plan_data)
+        # # user_plan_data["razorpay_order_id"] = razorpay_order_id
+        
+        # serializer = SubscriptionHistorySerializer(data=user_plan_data)
+        # if serializer.is_valid():
+        #     serializer.save()
+        #     response_data = serializer.data
+        #     success_data =  success_response(message=f"Enrollment initiated successfully.", code="success", data=response_data)
+        #     return Response(success_data, status=200) 
+
+        # error_data =  error_response(message=serializer.errors, code="error", data={})
+        # return Response(error_data, status=200)

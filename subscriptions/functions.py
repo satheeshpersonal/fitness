@@ -39,14 +39,18 @@ def get_subscription_data(user_data, plan_data, request_data):
         print(request_data.get("sessions_count"))
         user_plan_data["sessions_count"] = request_data.get("sessions_count", plan_data.session_count)
         user_plan_data["total_session_price"] = user_plan_data["sessions_count"]*plan_data.price
+        user_plan_data["expire_on"] = timezone.now().date()+timedelta(days=(user_plan_data["sessions_count"]*2)) #double the days based session count
+        user_plan_data["duration_in_days"] = user_plan_data["sessions_count"]*2
     else:
         user_plan_data["sessions_count"] = plan_data.session_count
         user_plan_data["total_session_price"] = plan_data.price
+        user_plan_data["expire_on"] = timezone.now().date()+timedelta(days=plan_data.duration_in_days)
+        user_plan_data["duration_in_days"] = plan_data.duration_in_days
 
     user_plan_data["per_session_price"] = plan_data.price
     user_plan_data["currency"] = plan_data.currency
-    user_plan_data["duration_in_days"] = plan_data.duration_in_days
-    user_plan_data["expire_on"] = timezone.now().date()+timedelta(days=plan_data.duration_in_days)
+    # user_plan_data["duration_in_days"] = plan_data.duration_in_days
+    # user_plan_data["expire_on"] = timezone.now().date()+timedelta(days=plan_data.duration_in_days)
     user_plan_data["price_discount"] = plan_data.price_discount #if any default discount
     user_plan_data["discount_percent"] = 0.00
     user_plan_data["discount_amount"] = 0.00
@@ -70,7 +74,7 @@ def get_count_data(user_id):
     from workouts.models import WorkoutSchedule, GymAccessLog
     
     try:
-        user_subscription = UserSubscription.objects.filter(user=user_id, is_active=True).values('expire_on', 'sessions_left').first()
+        user_subscription = UserSubscription.objects.filter(user=user_id, is_active=True).values('expire_on', 'sessions_left').order_by("-id").first()
 
         if user_subscription:
             user_subscription["access_left"] = user_subscription.pop("sessions_left")
@@ -125,3 +129,40 @@ def verify_razorpay_event(request):
         return event_data
         
     return None
+
+def redeem_free_session(user_data, request_data):
+    from subscriptions.models import SubscriptionPlan
+    from subscriptions.serializers import SubscriptionHistorySerializer
+    from accounts.models import Referral, FreeSessionRequest
+
+    try:
+        referral_count = Referral.objects.filter(referrer = user_data, user_status='C').count()
+        request_count = FreeSessionRequest.objects.filter(user=user_data, status='A').count()
+        if request_count >0 or referral_count <2:
+            print("redeem_free_session - Error in referral flow, Please contact admin")
+            return {"status":"error", "message":"Error in referral flow, Please contact admin", "code":"error"}
+            
+        plan_data = SubscriptionPlan.objects.filter(plan_type = 'D', status='A').first()
+        if not plan_data:
+            print("redeem_free_session - No plans available, Please select valid plan")
+            return {"status":"error", "message":"No plans available, Please select valid plan", "code":"not_found"}
+
+        user_plan_data = get_subscription_data(user_data, plan_data, request_data) # get plan data with price calculation
+        user_plan_data["per_session_price"] = 0
+        user_plan_data["tax"] = 0
+        user_plan_data["total_paid"] = 0
+        user_plan_data["plan"] = plan_data.id
+        user_plan_data["user"] = user_data.id
+        user_plan_data["payment_status"] = 'S'
+
+        # razorpay_order_id = razorpay_creat_order(user_plan_data)
+        # user_plan_data["razorpay_order_id"] = razorpay_order_id
+        
+        serializer = SubscriptionHistorySerializer(data=user_plan_data)
+        if serializer.is_valid():
+            serializer.save()
+            response_data = serializer.data
+            return {"status":"success", "message":"success", "code":"success"}
+    except Exception as e:
+        print("The redeem_free_session error : ",e)
+        return {"status":"error", "message":"Something went wrong. Please try again.", "code":"error"}

@@ -255,7 +255,6 @@ class GymView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, gym_id):
-        print(request.user.user_type)
         if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"): #if Executive or Admin
             gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
         else:

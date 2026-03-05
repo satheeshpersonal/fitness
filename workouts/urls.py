@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import GymAccessView, ScheduleView, ScheduleListView, GymAccessDetailsView
+from .views import GymAccessView, ScheduleView, ScheduleListView, GymAccessDetailsView, GymSessionView
 
 urlpatterns = [
-    path('/access-gym/', GymAccessView.as_view(), name='access-gym'),       # GET, POST, PATCH
+    path('/access-gym/', GymAccessView.as_view(), name='access-gym'),       # GET, POST, PATCH 
+    path('/gym-session/', GymSessionView.as_view(), name='gym-session'),       # GET, POST, PATCH 
     path('/access-gym/<id>/', GymAccessDetailsView.as_view(), name='access-gym-details'), 
     path('/schedule/list/', ScheduleListView.as_view(), name='Schedule-workout'),       # GET(List)
     path('/schedule/<pk>/', ScheduleView.as_view(), name='Schedule-workout-update'),       # GET(Details), PATCH, DELETE

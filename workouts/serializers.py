@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise
 from lookups.serializers import WorkoutTypeSerializer
 from accounts.functions import gym_response
+from accounts.serializers import UserDetailsSerializer
 
 class GymAccessLogSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,17 +13,8 @@ class GymAccessLogSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['gym'] =  gym_response(instance.gym)
-        # data['gym_name'] = instance.gym.name
-        # data['address'] = instance.gym.address
-        # data['city'] = instance.gym.city
-        # data['state'] = instance.gym.state
-        # data['country'] = instance.gym.country
-
-        # data['profile_icon'] = None
-        # if instance.gym.profile_icon:
-        #     data['profile_icon'] = instance.gym.profile_icon
-
-
+        data['user_details'] = UserDetailsSerializer(instance.user).data
+        
         return data
     
 

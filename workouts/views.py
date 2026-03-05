@@ -12,6 +12,7 @@ from .functions import create_workout
 from subscriptions.models import UserSubscription
 from .serializers import WorkoutScheduleSerializer, WorkoutExerciseSerializer
 import uuid
+from django.db.models import Sum
 # Create your views here.
 
 
@@ -76,6 +77,9 @@ class GymAccessView(APIView):
                 return Response(error_data, status=200)
             
             request_data["gym"] = gym_data.id
+            request_data["amount"] = gym_data.per_session_cost
+
+            request_data["user"] = user_data.id
             request_data["user"] = user_data.id
             print("request_data - ", request_data)
             serializer = GymAccessLogSerializer(data=request_data)
@@ -97,6 +101,40 @@ class GymAccessView(APIView):
         
         error_data =  error_response(message="No plans available, Please select valid plan", code="not_found", data={})
         return Response(error_data, status=200) 
+
+
+class GymSessionView(APIView):
+    """
+    Handles both POST (create) and PATCH (partial update) for CustomUser
+    """
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # print(request.data)
+        page_type = self.request.query_params.get('page', None)
+        gym_id = self.request.query_params.get('gym_id', None)
+        extra_data = {}
+
+        user_data = request.user
+        if gym_id:
+            gym_access = GymAccessLog.objects.filter(gym__owner = user_data, gym__gym_id = gym_id).order_by("-access_date")
+        else:
+            gym_access = GymAccessLog.objects.filter(gym__owner = user_data).order_by("-access_date")
+
+        pending_payout = gym_access.exclude(settled_status='PR').aggregate(total=Sum('amount'))['total'] or "0.00"
+        extra_data["pending_payout"] = pending_payout
+
+        if page_type:
+            gym_access = gym_access[0:3]
+        if gym_access:
+            gym_accessa_data = GymAccessLogSerializer(gym_access, many=True).data
+            success_data =  success_response(message="Success", code="success", data=gym_accessa_data, extra_data = extra_data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="No data found", code="not_found", data={})
+            return Response(error_data, status=200) 
+
 
 class GymAccessDetailsView(APIView):
     """
@@ -205,6 +243,7 @@ class ScheduleView(APIView):
         user_data = request.user
         request_data = request.data
         exercise_all = request_data.pop("exercise")
+        gym = request_data.pop("gym", None)
         workout_data = WorkoutSchedule.objects.filter(pk=pk, user=user_data).first()
         serializer = WorkoutScheduleSerializer(workout_data, data=request_data, partial=True)
         if serializer.is_valid():

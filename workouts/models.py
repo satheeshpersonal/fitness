@@ -14,6 +14,12 @@ STATUS_CHOICES = [
         ('D', 'Deleted'),
     ]
 
+# Create your models here.
+SETTLED_STATUS_CHOICES = [
+        ('P', 'Pending'),
+        ('IP', 'In Progress'),
+        ('PR', 'Processed'),
+    ]
 
 class GymAccessLog(models.Model):
     gym_access_id = models.UUIDField(default=uuid.uuid4) #access refrence number
@@ -21,6 +27,9 @@ class GymAccessLog(models.Model):
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
     device_id = models.CharField(max_length=100, null=True, blank=True) #mobile uniqe id (for refrence)
     access_date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    amount = models.DecimalField(max_digits=8, decimal_places=2)
+    settled_status = models.CharField(max_length=2, choices=SETTLED_STATUS_CHOICES, default='P')
+    settled_on = models.DateTimeField(null=True, blank=True)
     
 
     def __str__(self):
@@ -31,6 +40,11 @@ class GymAccessLog(models.Model):
 def update_user_session_signal(sender, instance, created, **kwargs):
     if created:
         update_user_session_log(instance.user) # reduce session left in user subcription
+    
+    if instance.settled_status == 'PR' and instance.settled_on is None:
+        instance.settled_on = timezone.now()
+        instance.save()
+
 
 
 

@@ -52,12 +52,29 @@ class WorkoutScheduleAdmin(admin.ModelAdmin):
 
 class GymAccessLogAdmin(admin.ModelAdmin):  # Or use admin.StackedInline for vertical layout
     # model = GymAccessLog
-    fields = ('gym_access_id', 'user', 'gym', 'device_id', 'access_date')
-    ordering = ('access_date',)
+    list_display_links = None
+    list_display = (
+        'gym__name', 
+        'gym__owner__first_name', 
+        'gym__owner__last_name', 
+        'gym__owner__email', 
+        'user__first_name',
+        'user__last_name',
+        'access_date',
+        'amount',
+        'settled_status',
+        'settled_on'
+    )
+    # fields = ('gym_access_id', 'user', 'gym', 'device_id', 'access_date')
+    ordering = ('-access_date',)
 
-    search_fields = ('user', 'gym', 'device_id',)
-    list_filter = ('user', 'gym', 'access_date',)
-    readonly_fields = ('access_date',)
+    search_fields = ('gym__name', 'gym__owner__first_name', 'gym__owner__last_name','gym__owner__email','user__first_name','user__last_name',)
+    list_filter = ('settled_status',)
+    list_editable = ('settled_status',)
+    # readonly_fields = ('access_date',)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 admin.site.register(WorkoutSchedule, WorkoutScheduleAdmin)
 admin.site.register(GymAccessLog, GymAccessLogAdmin)

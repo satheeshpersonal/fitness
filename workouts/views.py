@@ -78,10 +78,9 @@ class GymAccessView(APIView):
             
             request_data["gym"] = gym_data.id
             request_data["amount"] = gym_data.per_session_cost
-
-            request_data["user"] = user_data.id
             request_data["user"] = user_data.id
             print("request_data - ", request_data)
+            
             serializer = GymAccessLogSerializer(data=request_data)
             if serializer.is_valid():
                 serializer.save()

@@ -3,9 +3,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
 from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest
-from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer
+from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer, GymNameListSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
+from workouts.models import GymAccessLog
 from django.shortcuts import get_object_or_404
 from .functions import generte_top, send_otp, gym_response, referral_data_update
 from django.db.models import Q
@@ -391,7 +392,7 @@ class GymListView(APIView):
         if data.get("type", None):
             gym_list = gym_list.filter(premium_type=data["type"])
 
-        #if passing premium_type filter - plan
+        #if search gym name based
         if data.get("search_text", None):
             gym_list = gym_list.filter(name__icontains=data["search_text"])
 
@@ -431,12 +432,16 @@ class OwnerGymListView(APIView):
     def post(self, request):
         offset = int(self.request.query_params.get('offset', 0))
         limit = int(self.request.query_params.get('limit', 20))
+        page_type = self.request.query_params.get('page', 'L')
         data = request.data
        
         user_data = request.user
 
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
-        gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data))
+        gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data)).order_by("-created_at")
+
+        if page_type == 'D':
+            gym_list = gym_list[0:3]
 
         #if passing premium_type filter - plan
         if data.get("search_text", None): 
@@ -452,7 +457,30 @@ class OwnerGymListView(APIView):
         
         success_data =  success_response(message=f"success", code="success", data=serializer.data)
         return Response(success_data, status=200)
-    
+
+
+class GymNameListView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        page_type = self.request.query_params.get('page', 'L')
+        user_data = request.user
+
+        # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
+        gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data)).order_by("-created_at")
+        if gym_list:
+            if page_type == "D":
+                gym_list = gym_list[0:3]
+                
+            serializer = GymNameListSerializer(gym_list, many=True)
+            
+            success_data =  success_response(message=f"success", code="success", data=serializer.data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="No gym found", code="not_found", data={})
+            return Response(error_data, status=200) 
+   
 
 class DashboardView(APIView):
     authentication_classes = [authentication.TokenAuthentication]
@@ -474,6 +502,81 @@ class DashboardView(APIView):
         # else:
         #     error_data =  error_response(message="No data found", code="not_found", data={})
         #     return Response(error_data, status=200)
+
+class ExecutiveDashboardView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        data = {}
+        now = timezone.now()
+        user_data = request.user
+        # full_counts = Gym.objects.aggregate(
+        #                 pending=Count('id', filter=Q(status='P')),
+        #                 approved=Count('id', filter=Q(status='A')),
+        #                 rejected=Count('id', filter=Q(status='R')),
+        #                 total=Count('id')
+        #             )
+        
+        month_counts = Gym.objects.filter(
+                        created_by = user_data,
+                        created_at__year=now.year,
+                        created_at__month=now.month).values('status').annotate(total=Count('id')).order_by('status')
+        
+        full_counts = Gym.objects.filter(created_by = user_data).values('status').annotate(total=Count('id')).order_by('status')
+
+        month_total_counts = Gym.objects.filter(created_by = user_data,
+                                                created_at__year=now.year,
+                                                created_at__month=now.month).count()
+
+        total_counts = Gym.objects.filter(created_by = user_data).count()
+
+        data["month_counts"] = month_counts     
+        data["month_total_counts"] = month_total_counts   
+        data["full_counts"] = full_counts       
+        data["total_counts"] = total_counts       
+
+        success_data =  success_response(message=f"success", code="success", data=data)
+        return Response(success_data, status=200)
+
+class GymDashboardView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        data = {}
+        now = timezone.now()
+        user_data = request.user
+    
+        queryset = GymAccessLog.objects.filter(gym__owner=user_data)
+
+        data = queryset.aggregate(
+            # 💰 Full totals
+            full_total_amount=Sum('amount'),
+            processed_total_amount=Sum('amount', filter=Q(settled_status='PR')), #all procressed amount
+            pending_total_amount=Sum('amount', filter=~Q(settled_status='PR')),   #all pending amount (include inprocess status)
+
+            # 📅 This month total
+            month_total_amount=Sum(
+                'amount',
+                filter=Q(access_date__year=now.year,
+                         access_date__month=now.month)
+            ),
+
+            # 📊 Sessions
+            month_session=Count('id', filter=Q(access_date__year=now.year, access_date__month=now.month)),
+
+            # 👤 Unique users
+            month_unique_user=Count('user', distinct=True, filter=Q(access_date__year=now.year, access_date__month=now.month)),
+        )
+
+        # Replace None with 0
+        for key, value in data.items():
+            if value is None:
+                data[key] = 0     
+
+        success_data =  success_response(message=f"success", code="success", data=data)
+        return Response(success_data, status=200)
 
 
 class ReviewView(APIView):

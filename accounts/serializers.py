@@ -443,7 +443,14 @@ class GymListSerializer(serializers.ModelSerializer):
             return False
 
         return GymFavorite.objects.filter(user=user,gym=obj).exists()
-    
+
+
+class GymNameListSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Gym
+        fields = ['id', 'gym_id', 'profile_icon', 'name', 'address', 'city', 'state', 'premium_type', 'status']
+  
 
 class UserDetailsSerializer(serializers.ModelSerializer):
     class Meta:

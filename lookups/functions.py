@@ -81,10 +81,10 @@ def send_sms(otp, to_number):
 
 def send_template_email(subject, body, to_email, cc_email=None, template_key = None):
     # send_email_smtp(subject, body, to_email, cc_email)
-    # print(to_email)
-    # Thread(
-    #     target=send_email_api,
-    #     args=(subject, body, to_email),
-    #     daemon=True
-    # ).start()
+    print(to_email)
+    Thread(
+        target=send_email_api,
+        args=(subject, body, to_email),
+        daemon=True
+    ).start()
     pass

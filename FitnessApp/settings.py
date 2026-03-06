@@ -28,7 +28,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://192.168.1.10:5173/", 
     "http://localhost:5173/", 
     "http://127.0.0.1:8000",
-    "https://fitness-web-eta.vercel.app"
+    "https://fitness-web-eta.vercel.app",
+    "https://fitzz.in",
+    "https://api.fitzz.in"
 ]
 
 # --------------------------------------------------

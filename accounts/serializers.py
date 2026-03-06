@@ -4,6 +4,11 @@ from lookups.models import GymFeature
 from lookups.serializers import GymFeatureSerializer
 import json
 
+from PIL import Image
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from io import BytesIO
+import sys
+
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -182,6 +187,22 @@ class GymOptionsSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['owner', 'verified_by', 'verified_at']
 
+    def convert_to_webp(self, image):
+        img = Image.open(image)
+
+        output = BytesIO()
+        img.save(output, format='WEBP', quality=85)
+        output.seek(0)
+
+        return InMemoryUploadedFile(
+            output,
+            'ImageField',
+            f"{image.name.split('.')[0]}.webp",
+            'image/webp',
+            sys.getsizeof(output),
+            None
+        )
+
 
     # ---------- CREATE ----------
     @transaction.atomic
@@ -190,6 +211,11 @@ class GymOptionsSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         owner_data = self.context.get('owner_data')
 
+         # 🔹 convert image if provided
+        profile_image = validated_data.get('profile_icon')
+        if profile_image:
+            validated_data['profile_icon'] = self.convert_to_webp(profile_image)
+            
         gym = Gym.objects.create(
             owner=owner_data,
             created_by=request.user,
@@ -206,6 +232,11 @@ class GymOptionsSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
 
         validated_data.pop("feature", None)
+        
+        # 🔹 convert image if provided
+        profile_image = validated_data.get("profile_icon")
+        if profile_image:
+            validated_data["profile_icon"] = self.convert_to_webp(profile_image)
 
         # Update simple fields
         for attr, value in validated_data.items():
@@ -283,6 +314,9 @@ class GymOptionsSerializer(serializers.ModelSerializer):
             for index in media_dict:
                 item = media_dict[index]
                 media_id = item.get("id")
+                gym_image = item.get("file")
+                if gym_image:
+                    gym_image = self.convert_to_webp(gym_image)
 
                 if media_id:
                     media_obj = GymMedia.objects.get(id=media_id, gym=gym)
@@ -290,8 +324,8 @@ class GymOptionsSerializer(serializers.ModelSerializer):
                     media_obj.description = item.get("description", media_obj.description)
                     media_obj.position = item.get("position", media_obj.position)
 
-                    if item.get("file"):
-                        media_obj.media = item.get("file")
+                    if gym_image:
+                        media_obj.media = gym_image
 
                     media_obj.save()
                     existing_ids.append(media_obj.id)
@@ -302,7 +336,7 @@ class GymOptionsSerializer(serializers.ModelSerializer):
                         name=item.get("name"),
                         description=item.get("description"),
                         position=item.get("position", 1),
-                        media=item.get("file")
+                        media=gym_image
                     )
                     existing_ids.append(new_media.id)
 

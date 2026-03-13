@@ -9,6 +9,7 @@ from decouple import config
 from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription
 from .serializers import SubscriptionHistorySerializer, SubscriptionPlanSerializer
 from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event, redeem_free_session
+from lookups.functions import send_template_email
 # from django.views.decorators.csrf import csrf_exempt
 # Create your views here.
 
@@ -171,29 +172,36 @@ class SubscriptionDetailsView(APIView):
 # @csrf_exempt
 class RazorpayWebhook(APIView):
     def post(self, request): 
-        try:  
-            if 1==1:      
-                razorpay_event_data = verify_razorpay_event(request)
-                print("razorpay_event_data -- ", razorpay_event_data)
-                if razorpay_event_data:
-                    # Update order status
-                    order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()
-                    if order:
-                        order.razorpay_payment_id = razorpay_event_data["payment_id"]
+        try:    
+            razorpay_event_data = verify_razorpay_event(request)
+            print("razorpay_event_data -- ", razorpay_event_data)
+            if razorpay_event_data:
+                # Update order status
+                order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()
+                if order:
+                    order.razorpay_payment_id = razorpay_event_data["payment_id"]
 
-                        if razorpay_event_data["event"] == 'payment.captured':
-                            order.payment_status = 'S'
-                        elif razorpay_event_data["event"] == 'payment.failed':
-                            order.payment_status = 'F'
-                            order.error_code = razorpay_event_data["error_code"]
-                            order.error_description = razorpay_event_data["error_description"]
-                        
-                        order.save()
-                        # Add business logic here, e.g., send email
+                    if razorpay_event_data["event"] == 'payment.captured':
+                        order.payment_status = 'S'
+                    elif razorpay_event_data["event"] == 'payment.failed':
+                        order.payment_status = 'F'
+                        order.error_code = razorpay_event_data["error_code"]
+                        order.error_description = razorpay_event_data["error_description"]
                     
-                # Handle other events as needed, e.g., payment.failed
-                else:
-                    print("X-Razorpay-Signature not verified" )
+                    order.save()
+
+                    try:
+                        if order.payment_status == 'S':
+                            emails = {"to_email":[order.user.email]} # to-email and cc-email will add as array
+                            param = {"plan_type": order.plan.plan_type_display(), "session_count":order.sessions_count, "amount":order.total_paid, "expiry_date":order.expire_on.strftime("%d %b %Y")} #all email parameters
+                            send_template_email("subscription_plan", emails, param)
+                    except Exception as e:
+                        print("The payment email error : ",e)
+                    # Add business logic here, e.g., send email
+                
+            # Handle other events as needed, e.g., payment.failed
+            else:
+                print("X-Razorpay-Signature not verified" )
         
         except Exception as e:
             print("The razorpay_webhook error : ",e)

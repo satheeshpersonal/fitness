@@ -13,6 +13,8 @@ from subscriptions.models import UserSubscription
 from .serializers import WorkoutScheduleSerializer, WorkoutExerciseSerializer
 import uuid
 from django.db.models import Sum
+from lookups.functions import send_template_email
+from datetime import datetime
 # Create your views here.
 
 
@@ -52,7 +54,7 @@ class GymAccessView(APIView):
                 if gym_access.device_id == request_data["device_id"] and gym_access.gym.gym_id  == uuid.UUID(request_data["gym_id"]):  # if user try with same gym with in 30 minutes and same device- we are showing seccess message
                     gym_accessa_data = GymAccessLogSerializer(gym_access).data
                     workout_schedule_id = create_workout(user_data, None, gym_accessa_data)
-                    gym_accessa_data["workout_schedule_id"] = workout_schedule_id
+                    gym_accessa_data["workout_schedule_id"] = workout_schedule_id                      
                     success_data =  success_response(message="Successfully accessed", code="success", data=gym_accessa_data)
                     return Response(success_data, status=200) 
                 else: # if user try with diffrent gym or same gym with diffent device with in 30 minutes or diffrent device 
@@ -91,6 +93,15 @@ class GymAccessView(APIView):
                     gym_log_data["workout_schedule_id"] = workout_schedule_id
                 except Exception as e:
                     print("The create_workout error : ",e)
+                
+                #send email
+                try:
+                    access_date = datetime.fromisoformat(gym_log_data["access_date"])
+                    emails = {"to_email":[user_data.email]} # to-email and cc-email will add as array
+                    param = {"gym_name": gym_log_data["gym"]["gym_name"], "session_date":access_date.strftime("%d %b %Y %I:%M %p"), "gym_address":f'{gym_log_data["gym"]["address"]}, {gym_log_data["gym"]["city"]}, {gym_log_data["gym"]["state"]}'} #all email parameters
+                    send_template_email("access_session", emails, param)
+                except Exception as e:
+                    print("The payment email error : ",e)  
 
                 success_data =  success_response(message="Successfully accessed", code="success", data=gym_log_data)
                 return Response(success_data, status=200) 
@@ -124,7 +135,7 @@ class GymSessionView(APIView):
         pending_payout = gym_access.exclude(settled_status='PR').aggregate(total=Sum('amount'))['total'] or "0.00"
         extra_data["pending_payout"] = pending_payout
 
-        if page_type:
+        if page_type == "D":
             gym_access = gym_access[0:3]
         if gym_access:
             gym_accessa_data = GymAccessLogSerializer(gym_access, many=True).data

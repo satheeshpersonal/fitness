@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .functions import update_user_session_log
+from accounts.models import GymReview
 
 # Create your models here.
 STATUS_CHOICES = [
@@ -30,6 +31,7 @@ class GymAccessLog(models.Model):
     amount = models.DecimalField(max_digits=8, decimal_places=2)
     settled_status = models.CharField(max_length=2, choices=SETTLED_STATUS_CHOICES, default='P')
     settled_on = models.DateTimeField(null=True, blank=True)
+    review = models.ForeignKey(GymReview, on_delete=models.SET_NULL, null=True, blank=True)
     
 
     def __str__(self):

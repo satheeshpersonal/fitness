@@ -161,8 +161,11 @@ class verifyOTPView(APIView):
                     user_data.status = "A"
                     user_data.save(update_fields=["status"])
                     #send welcome email to user if first time verifiy account
-                    if user_data.email:
-                        send_template_email("Welcome", f"Welcome to the application", [user_data.email]) 
+                    if user_data.email and user_data.user_type == "U":
+                        # send_template_email("Welcome", f"Welcome to the application", [user_data.email]) 
+                        emails = {"to_email":[user_data.email]}
+                        param = {"first_name":user_data.first_name}
+                        send_template_email("Welcome", emails, param)
                 user_details = CustomUserSerializer(user_data).data
                 
                 # if user_data.profile_completed: #check Profile status
@@ -337,9 +340,19 @@ class GymCreateView(APIView):
         
         if serializer.is_valid(raise_exception=True):
             instance = serializer.save()
-            print("instance -- ", instance)
-            print("serializer.data -- ", serializer.data)
-            success_data =  success_response(message=f"success", code="success", data=serializer.data)   
+            gym_data = serializer.data
+            
+            try:
+                # owner_data = request.user
+                print("instance -- ", owner_data.email)
+                if not gym_id: #send email only create time
+                    emails = {"to_email":[owner_data.email]} # to-email and cc-email will add as array
+                    param = {"gym_name": gym_data["name"], "city":gym_data["city"], "owner_name":owner_data.first_name+" "+owner_data.last_name, "mobile":owner_data.mobile_number} #all email parameters
+                    send_template_email("register_gym", emails, param)
+            except Exception as e:
+                print("send email for register gym: ",e)
+
+            success_data =  success_response(message=f"success", code="success", data=gym_data)   
             return Response(success_data, status=200)
         else:
             print(serializer.errors)
@@ -472,7 +485,7 @@ class GymNameListView(APIView):
         if gym_list:
             if page_type == "D":
                 gym_list = gym_list[0:3]
-                
+
             serializer = GymNameListSerializer(gym_list, many=True)
             
             success_data =  success_response(message=f"success", code="success", data=serializer.data)
@@ -621,9 +634,26 @@ class ReviewView(APIView):
 
         data = request.data
         data["user"] = request.user.id
-        serializer = GymReviewSerializer(data = data)
+        review_id = data.get("review_id", None)
+        if review_id:
+            review_data = GymReview.objects.filter(id = review_id, user=request.user).first()
+            if review_data:
+                serializer = GymReviewSerializer(review_data, data=data, partial=True)
+            else:
+                error_data =  error_response(message="No review found", code="not_found", data={})
+                return Response(error_data, status=200)
+        else:
+            serializer = GymReviewSerializer(data = data)
         if serializer.is_valid():
             instance = serializer.save()
+            #connect session review
+            session_id = data.get("session_id", None)
+            if session_id and not review_id:
+                gym_session = GymAccessLog.objects.filter(id = int(session_id)).first()
+                if gym_session:
+                    gym_session.review_id = instance.id
+                    gym_session.save()
+                
             success_data =  success_response(message=f"success", code="success", data=serializer.data)   
             return Response(success_data, status=200)
         else:

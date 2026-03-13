@@ -18,7 +18,10 @@ def send_otp(mobile_number, email, otp_code, semding_type):
         # send_sms(otp_code, mobile_number) #send OTP to mobile number
         pass
     else:
-        send_template_email("OTP", f"OTP is {otp_code}", [email])
+        emails = {"to_email":[email]} # to-email and cc-email will add as array
+        param = {"otp_code": otp_code} #all email parameters
+        send_template_email("OTP", emails, param)
+        # send_template_email("OTP", f"OTP is {otp_code}", [email])
 
 
 def gym_response(gym):

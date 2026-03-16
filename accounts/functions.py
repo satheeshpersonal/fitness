@@ -15,7 +15,7 @@ def generte_top(user, login_type=None):
 
 def send_otp(mobile_number, email, otp_code, semding_type):
     if semding_type == 'M':
-        # send_sms(otp_code, mobile_number) #send OTP to mobile number
+        send_sms(otp_code, mobile_number) #send OTP to mobile number
         pass
     else:
         emails = {"to_email":[email]} # to-email and cc-email will add as array
@@ -58,3 +58,34 @@ def referral_data_update(referral_data):
         print("instance -- ", instance)
     else:
         print("Error in referral flow - ", serializer.errors)
+
+
+ALLOWED_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "ymail.com",
+    "icloud.com",
+    "me.com",
+    "protonmail.com",
+    "zoho.com",
+    "gmx.com",
+    "mail.com",
+    "rediffmail.com"
+}
+
+def validate_email(email):
+    email = email.lower()
+    local, domain = email.split("@")
+
+    if domain in ALLOWED_EMAIL_DOMAINS:
+        local = local.split("+")[0] #remove + text and get original emails
+        # remove dots
+        # local = local.replace(".", "")
+        return f"{local}@{domain}"
+    else:
+        return False

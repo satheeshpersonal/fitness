@@ -8,7 +8,7 @@ from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
 from workouts.models import GymAccessLog
 from django.shortcuts import get_object_or_404
-from .functions import generte_top, send_otp, gym_response, referral_data_update
+from .functions import generte_top, send_otp, gym_response, referral_data_update, validate_email
 from django.db.models import Q
 from django.utils import timezone
 from FitnessApp.utils.response import success_response, error_response
@@ -60,7 +60,14 @@ class CustomUserView(APIView):
             data["login_type"] = "M" 
             message = "OTP triggered to your register mobile number"
         else:
+            valid_email = validate_email(email)
+            if not valid_email:
+                error_data =  error_response(message="Please use a valid email provider", code="user_name", data={})
+                return Response(error_data, status=200)
+
+            email = valid_email
             data["username"] = email 
+            print("valid_email - ", email)
             data["login_type"] = "E" 
             message = "OTP triggered to your register email"
 
@@ -75,7 +82,7 @@ class CustomUserView(APIView):
             return Response(success_data, status=200) 
         
         #if new user
-        serializer = CustomUserSerializer(data=request.data)
+        serializer = CustomUserSerializer(data=data)
         if serializer.is_valid():
             user_obj = serializer.save()
             otp_code = generte_top(user_obj, data["login_type"]) 
@@ -132,6 +139,36 @@ class CustomUserView(APIView):
         error_data =  error_response(message=serializer.errors, code="error", data={})
         return Response(error_data, status=200) 
 
+
+class ResendOTPView(APIView):
+    """
+    Handles both POST (create) and PATCH (partial update) for CustomUser
+    """
+    def post(self, request): #Register User
+        # print(request.data)
+        data = request.data
+        user_name = data.get("user_name", None)
+        login_type = data.get("login_type", None)
+
+        if not user_name:
+            print("value missing")
+            error_data =  error_response(message="User name is required to send OTP", code="user_name", data={})
+            return Response(error_data, status=200)
+        
+        user_data = CustomUser.objects.filter(Q(mobile_number = user_name) | Q(email__iexact = user_name)).first()
+        if not user_data:
+            error_data =  error_response(message="User account not exist", code="not_found", data={})
+            return Response(error_data, status=200) 
+        elif user_data and user_data.status in ["I", "D"]:
+            error_data =  error_response(message="Please contact admin", code="login_error", data={})
+            return Response(error_data, status=200)
+        
+        otp_code = generte_top(user_data, login_type)
+        send_otp(user_data.mobile_number, user_data.email, otp_code, login_type)
+        # return Response("Use OTP to login", status=status.HTTP_201_CREATED)
+        success_data =  success_response(message="OTP triggered successfully", code="success", data=data)
+        return Response(success_data, status=200) 
+        
 
 class verifyOTPView(APIView):
     """

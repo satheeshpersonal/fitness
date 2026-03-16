@@ -75,8 +75,10 @@ def send_email_api(to_email, param={}, template_id=0, cc_email=None):
 def send_sms(otp, to_number):
     url = "https://www.fast2sms.com/dev/bulkV2"
     payload = {
-        "route" : "otp",
-        "variables_values" : otp, #only otp
+        # "route" : "otp",
+        # "variables_values" : otp, #only otp
+        "route": "q",   # transactional route
+        "message": f"Fitzz: Your OTP is {otp}. Valid for 5 minutes. Do not share this code.",
         "numbers" : to_number,
     }
 

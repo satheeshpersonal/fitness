@@ -214,16 +214,18 @@ class verifyOTPView(APIView):
                 user_details["full_name"] = user_details["first_name"]+" "+user_details["last_name"]
 
                 # check this user in referral program
-                referred_user = Referral.objects.filter(referred_user = user_data.id).first()
+                referred_user = Referral.objects.filter(referred_user = user_data.id, user_status="P").first()
                 if referred_user:
                     referral_data = {"user_status":"C"}
                     referred_count = Referral.objects.filter(referrer = referred_user.referrer, user_status="C").count()
                     if referred_count >= 2: #first 2 referral for free session
                         referral_data["reward_points"] = 50
 
+                    print("referral_data", referral_data)
                     serializer = ReferralSerializer(referred_user, data=referral_data, partial=True)
                     if serializer.is_valid():
                         instance = serializer.save()
+                        print(instance.user_status)
                     else:
                         print("Error in referral update flow - ", serializer.errors)
 

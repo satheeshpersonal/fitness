@@ -512,7 +512,7 @@ class GymFavoriteSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at']
 
 class ReferralSerializer(serializers.ModelSerializer):
-    user_status = serializers.SerializerMethodField()
+    user_status_display = serializers.SerializerMethodField()
     user_data= serializers.SerializerMethodField()
 
     class Meta:
@@ -520,7 +520,7 @@ class ReferralSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_at']
 
-    def get_user_status(self, obj):
+    def get_user_status_display(self, obj):
         return {
             "code": obj.user_status,
             "label": obj.get_user_status_display()

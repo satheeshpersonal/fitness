@@ -194,10 +194,10 @@ class verifyOTPView(APIView):
             serializer = CustomUserSerializer(data=data)
             if serializer.is_valid():
                 user_data = serializer.save()
-                # if referral_code: #refrel flow
-                #     referred_by = CustomUser.objects.filter(~Q(id=user_data.id), referral_code=referral_code).first()
-                # if referred_by:
-                #     referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
+                if referral_code: #refrel flow
+                    referred_by = CustomUser.objects.filter(~Q(id=user_data.id), referral_code=referral_code).first()
+                if referred_by:
+                    referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
             else:
                 print(data)
                 print("serializer - ", serializer.errors)

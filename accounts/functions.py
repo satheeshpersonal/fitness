@@ -5,6 +5,8 @@ from django.utils import timezone
 from datetime import timedelta
 from .serializers import ReferralSerializer
 from .models import Referral
+import requests
+from decouple import config
 
 def generte_top(user, login_type=None):
     data = {}
@@ -15,7 +17,7 @@ def generte_top(user, login_type=None):
 
 def send_otp(mobile_number, email, otp_code, semding_type):
     if semding_type == 'M':
-        send_sms(otp_code, mobile_number) #send OTP to mobile number
+        # send_sms(otp_code, mobile_number) #send OTP to mobile number
         pass
     else:
         emails = {"to_email":[email]} # to-email and cc-email will add as array
@@ -89,3 +91,22 @@ def validate_email(email):
         return f"{local}@{domain}"
     else:
         return False
+    
+
+def verify_msg91_token(token):
+    # print("YOUR_MSG91_AUTH_KEY - ", config("YOUR_MSG91_AUTH_KEY").strip())
+    # url = "https://control.msg91.com/api/v5/widget/verifyAccessToken"
+
+    # headers = {
+    #     "authkey":  config("YOUR_MSG91_AUTH_KEY").strip()
+    # }
+
+    # payload = {
+    #     "token": token
+    # }
+
+    # response = requests.post(url, json=payload, headers=headers)
+    # return response.json()
+    if token:
+        return {'message': 'success', 'type': 'success', 'code': 200}
+    

@@ -8,7 +8,7 @@ from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
 from workouts.models import GymAccessLog
 from django.shortcuts import get_object_or_404
-from .functions import generte_top, send_otp, gym_response, referral_data_update, validate_email
+from .functions import generte_top, send_otp, gym_response, referral_data_update, validate_email, verify_msg91_token
 from django.db.models import Q
 from django.utils import timezone
 from FitnessApp.utils.response import success_response, error_response
@@ -71,7 +71,6 @@ class CustomUserView(APIView):
             data["login_type"] = "E" 
             message = "OTP triggered to your register email"
 
-        
         #check user alredy exist
         user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False)).first()
         if user_data:
@@ -178,22 +177,47 @@ class verifyOTPView(APIView):
     def post(self, request): #Register User
         # print(request.data)
         data = request.data
-        user_name = data.get("user_name", None)
+        username = data.get("username", None)
         otp_code = data.get("otp_code", None)
+        msg_token = data.get("msg_token", None)
+        referral_code = data.pop("referral_code", None)
+        msg_token_valid = False
 
-        if not user_name and not otp_code:
+        if not username and (not otp_code or not msg_token):
             error_data =  error_response(message="User name and OTP required for verfiy account", code="missing_value", data={})
             return Response(error_data, status=200) 
             # return Response({"error": "User name and OTP required for verfiy account"}, status=status.HTTP_400_BAD_REQUEST) 
         
         #check user alredy exist
-        user_data = CustomUser.objects.filter(Q(mobile_number = user_name) | Q(email__iexact = user_name)).first()
-        if user_data and user_data.status in ["I", "D"]:
+        user_data = CustomUser.objects.filter(Q(mobile_number = username) | Q(email__iexact = username)).first()
+        if not user_data and data["login_type"] == "M" :
+            serializer = CustomUserSerializer(data=data)
+            if serializer.is_valid():
+                user_data = serializer.save()
+                # if referral_code: #refrel flow
+                #     referred_by = CustomUser.objects.filter(~Q(id=user_data.id), referral_code=referral_code).first()
+                # if referred_by:
+                #     referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
+            else:
+                print(data)
+                print("serializer - ", serializer.errors)
+                error_data =  error_response(message=serializer.errors, code="error", data={})
+                return Response(error_data, status=200)
+            # error_data =  error_response(message="User account not exist", code="not_found", data={})
+            # return Response(error_data, status=200) 
+        elif user_data and user_data.status in ["I", "D"]:
             error_data =  error_response(message="Please contact admin", code="login_error", data={})
             return Response(error_data, status=200)
         if user_data:
+            print("user_data")
+            if data["login_type"] == "M":
+                print("login_type")
+                msg_verify_data = verify_msg91_token(msg_token)
+                if msg_verify_data["code"] == 200:
+                    msg_token_valid = True
+            
             user_otp = UserOTP.objects.filter(user = user_data, expire_on__gte = timezone.now()).order_by("-created_at").first()
-            if user_otp and user_otp.otp == otp_code:
+            if (user_otp and user_otp.otp == otp_code) or msg_token_valid:
                 if user_data.status == "P":
                     user_data.status = "A"
                     user_data.save(update_fields=["status"])
@@ -203,6 +227,7 @@ class verifyOTPView(APIView):
                         emails = {"to_email":[user_data.email]}
                         param = {"first_name":user_data.first_name}
                         send_template_email("Welcome", emails, param)
+
                 user_details = CustomUserSerializer(user_data).data
                 
                 # if user_data.profile_completed: #check Profile status

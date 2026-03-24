@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 
 # Register your models here.
-from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest
+from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest, UserOTP
 
 
 # Inline admin for user select locaiotn
@@ -27,8 +27,14 @@ class CustomUserAdmin(UserAdmin):
         'last_name', 
         'user_type',
         'status',
-        'created_at'
+        'created_at',
+        "get_otp"
     )
+
+    def get_otp(self, obj):
+        otp = UserOTP.objects.filter(user=obj).order_by("-created_at").first()
+        return otp.otp if otp else "-"
+    get_otp.short_description = "OTP"
 
     list_filter = ('status', 'user_type',)
 

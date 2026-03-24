@@ -5,7 +5,7 @@ from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, G
 urlpatterns = [
     path('/', CustomUserView.as_view(), name='user-data'),       # GET, POST & PATCH
     # path('/<int:pk>/', CustomUserView.as_view(), name='user-patch'),  # PATCH
-     path('/resend-otp/', ResendOTPView.as_view(), name='otp-validation-post'),  # POST
+    path('/resend-otp/', ResendOTPView.as_view(), name='otp-validation-post'),  # POST
     path('/verify-account/', verifyOTPView.as_view(), name='otp-validation-post'),  # POST
     path('/select-location/', SelectLocationView.as_view(), name='select-location'),  # GET, POST & PATCH #select location from top left corner
     path('/select-location/<id>/', SelectLocationView.as_view(), name='select-location-delete'), # DELETE

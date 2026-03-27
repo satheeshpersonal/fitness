@@ -22,6 +22,14 @@ SETTLED_STATUS_CHOICES = [
         ('PR', 'Processed'),
     ]
 
+# Create your models here.
+GOAL_TYPE_CHOICES = [
+        ('WL', 'Weight Loss'),
+        ('MG', 'Muscle Gain'),
+        ('FT', 'Stay Fit'),
+        ('FL', 'Flexibility'),
+    ]
+
 class GymAccessLog(models.Model):
     gym_access_id = models.UUIDField(default=uuid.uuid4) #access refrence number
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -84,3 +92,15 @@ class WorkoutExercise(models.Model):
     def __str__(self):
         return self.exercise_name
     
+
+class SetGoal(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    goal_type = models.CharField(max_length=2, choices=GOAL_TYPE_CHOICES, default='WL')
+    level = models.CharField(max_length=100, null=True, blank=True)
+    workout_days = models.IntegerField(null=True, blank=True)
+    current_weight = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    target_weight = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.gym.goal_type

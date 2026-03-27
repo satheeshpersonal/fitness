@@ -5,8 +5,8 @@ from rest_framework import status, permissions, authentication
 from FitnessApp.utils.response import success_response, error_response
 from django.utils import timezone
 from datetime import timedelta, date
-from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise
-from .serializers import GymAccessLogSerializer
+from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise, SetGoal
+from .serializers import GymAccessLogSerializer, SetGoalSerializer
 from accounts.models import Gym
 from .functions import create_workout
 from subscriptions.models import UserSubscription
@@ -300,3 +300,60 @@ class ScheduleView(APIView):
             error_data =  error_response(message="WorkoutSchedule not found.", code="serializer", data={})
             return Response(error_data, status=200)
               
+
+class SetGoalView(APIView):
+    """
+    Handles both POST (create) and PATCH (partial update) for CustomUser
+    """
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+        
+    def get(self, request):
+        # print(request.data)
+        user_data = request.user
+        goal_data = SetGoal.objects.filter(user=user_data).first()
+        
+        if goal_data:
+            serializer = SetGoalSerializer(goal_data)
+            set_goal_data = serializer.data
+            success_data =  success_response(message="Success", code="success", data=set_goal_data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="Goal data not found.", code="serializer", data={})
+            return Response(error_data, status=200)
+
+        
+    def post(self, request): #Register User
+        # print(request.data)
+        request_data = request.data
+        user_data = request.user
+        request_data["user"] = user_data.id
+        serializer = SetGoalSerializer(data = request_data)
+        if serializer.is_valid():
+            instance = serializer.save()
+            goal_data = serializer.data
+            success_data =  success_response(message="Success", code="success", data=goal_data)
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message=serializer.errors, code="serializer", data={})
+            return Response(error_data, status=200) 
+        
+    
+    def patch(self, request, pk):
+        user_data = request.user
+        request_data = request.data
+    
+        goal_data = SetGoal.objects.filter(pk=pk, user=user_data).first()
+        if goal_data:
+            serializer = SetGoalSerializer(goal_data, data=request_data, partial=True)
+            if serializer.is_valid():
+                instance = serializer.save()
+                set_goal_data = serializer.data
+                success_data =  success_response(message="Success", code="success", data=set_goal_data)
+                return Response(success_data, status=200)
+            else:
+                error_data =  error_response(message=serializer.errors, code="serializer", data={})
+                return Response(error_data, status=200) 
+        else:
+            error_data =  error_response(message="Goal data not found.", code="serializer", data={})
+            return Response(error_data, status=200)

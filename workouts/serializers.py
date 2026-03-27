@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise
+from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise, SetGoal
 from lookups.serializers import WorkoutTypeSerializer
 from accounts.functions import gym_response
 from accounts.serializers import UserDetailsSerializer
@@ -56,3 +56,11 @@ class WorkoutScheduleSerializer(serializers.ModelSerializer):
 
         return data
     
+
+class SetGoalSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = SetGoal
+        fields = '__all__'  # include all fields
+        read_only_fields = ['created_at']  # only these are read-only
+

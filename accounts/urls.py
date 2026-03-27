@@ -1,12 +1,13 @@
 
 from django.urls import path
-from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView, FavoritesGymView, HealthCheckView, ReferralView, ReferralCountView, FreeSessionRequestView, GymCreateView, OwnerGymListView, ExecutiveDashboardView, GymDashboardView, GymNameListView, ResendOTPView
+from .views import CustomUserView, verifyOTPView, SelectLocationView, GymView, GymListView, DashboardView, ReviewView, ReviewDetailtView, FavoritesGymView, HealthCheckView, ReferralView, ReferralCountView, FreeSessionRequestView, GymCreateView, OwnerGymListView, ExecutiveDashboardView, GymDashboardView, GymNameListView, ResendOTPView, DeleteAccountView
 
 urlpatterns = [
     path('/', CustomUserView.as_view(), name='user-data'),       # GET, POST & PATCH
     # path('/<int:pk>/', CustomUserView.as_view(), name='user-patch'),  # PATCH
     path('/resend-otp/', ResendOTPView.as_view(), name='otp-validation-post'),  # POST
     path('/verify-account/', verifyOTPView.as_view(), name='otp-validation-post'),  # POST
+    path('/delete-account/', DeleteAccountView.as_view(), name='otp-validation-post'),  # POST
     path('/select-location/', SelectLocationView.as_view(), name='select-location'),  # GET, POST & PATCH #select location from top left corner
     path('/select-location/<id>/', SelectLocationView.as_view(), name='select-location-delete'), # DELETE
 

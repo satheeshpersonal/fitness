@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 
 # Register your models here.
-from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest, UserOTP
+from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest, UserOTP, AccountDeleteRequest
 
 
 # Inline admin for user select locaiotn
@@ -144,7 +144,7 @@ class GymReviewAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
 
-# gym Review
+
 class GymFavoriteAdmin(admin.ModelAdmin):
     list_display_links = None
     list_display = (
@@ -161,7 +161,7 @@ class GymFavoriteAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
 
-# gym Review
+
 class FreeSessionRequestAdmin(admin.ModelAdmin):
     list_display_links = None
     list_display = (
@@ -184,11 +184,32 @@ class FreeSessionRequestAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class AccountDeleteRequestAdmin(admin.ModelAdmin):
+    list_display_links = None
+    list_display = (
+        'user__username',
+        'user__mobile_number',
+        'user__email',
+        'requested_on',
+        'status'
+    )
+
+    # Make fields searchable
+    search_fields = ('user__username','user__mobile_number','user__email',)
+    list_filter = ('status',)
+
+    list_editable = ('status',)
+    ordering = ('-requested_on',)
+
+
+
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Gym, GymAdmin)
 admin.site.register(GymReview, GymReviewAdmin)
 admin.site.register(GymFavorite, GymFavoriteAdmin)
 admin.site.register(FreeSessionRequest, FreeSessionRequestAdmin)
+admin.site.register(AccountDeleteRequest, AccountDeleteRequestAdmin)
+
 
 
 

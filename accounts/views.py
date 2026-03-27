@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
-from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest
+from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest, AccountDeleteRequest
 from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer, GymNameListSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
@@ -109,11 +109,11 @@ class CustomUserView(APIView):
         if hasattr(user_input_data, "_mutable") and not user_input_data._mutable and not request.FILES:
             user_input_data._mutable = True
 
-        required_fields = ['full_name']
-        missing_fields = [field for field in required_fields if not user_input_data.get(field)]
-        if missing_fields:
-            error_data =  error_response(message=f"Missing or empty fields: {', '.join(missing_fields)}", code="success", data={})
-            return Response(error_data, status=200)
+        # required_fields = ['full_name']
+        # missing_fields = [field for field in required_fields if not user_input_data.get(field)]
+        # if missing_fields:
+        #     error_data =  error_response(message=f"Missing or empty fields: {', '.join(missing_fields)}", code="success", data={})
+        #     return Response(error_data, status=200)
         
         full_name = user_input_data.pop("full_name", None)
         # Split full name
@@ -196,8 +196,8 @@ class verifyOTPView(APIView):
                 user_data = serializer.save()
                 if referral_code: #refrel flow
                     referred_by = CustomUser.objects.filter(~Q(id=user_data.id), referral_code=referral_code).first()
-                if referred_by:
-                    referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
+                    if referred_by:
+                        referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
             else:
                 print(data)
                 print("serializer - ", serializer.errors)
@@ -229,7 +229,7 @@ class verifyOTPView(APIView):
                         send_template_email("Welcome", emails, param)
 
                 user_details = CustomUserSerializer(user_data).data
-                
+                print("user_details - ", user_details)
                 # if user_data.profile_completed: #check Profile status
                 # Delete old token if exists
                 Token.objects.filter(user=user_data).delete()
@@ -254,6 +254,9 @@ class verifyOTPView(APIView):
                     else:
                         print("Error in referral update flow - ", serializer.errors)
 
+                # cancel delete request login in between - if any 
+                cancel_delete_request = AccountDeleteRequest.objects.filter(user = user_data, status = 'A').update(status='C')
+
                 success_data =  success_response(message=f"User account verified successfully", code="success", data=user_details)
                 return Response(success_data, status=200) 
                 # return Response(user_details.datas, status=status.HTTP_201_CREATED)
@@ -266,6 +269,21 @@ class verifyOTPView(APIView):
             return Response(error_data, status=200) 
             # return Response({"error": "User account not exist"}, status=status.HTTP_400_BAD_REQUEST) 
 
+
+class DeleteAccountView(APIView):
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):        
+        user_data = UserSelectLocation.objects.filter(id = request.user.id)
+        if user_data:
+            AccountDeleteRequest.objects.create(user=request.user, request_reason="")
+            success_data =  success_response(message=f"Request submitted successfully", code="success", data={})
+            return Response(success_data, status=200)
+        else:
+            error_data =  error_response(message="No data found", code="not_found", data={})
+            return Response(error_data, status=200) 
+        
 
 class SelectLocationView(APIView):
     authentication_classes = [authentication.TokenAuthentication]

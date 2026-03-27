@@ -10,18 +10,33 @@ from io import BytesIO
 import sys
 
 class CustomUserSerializer(serializers.ModelSerializer):
+    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    profile_icon = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'referral_code', 'ip_country', 'ip_state', 'ip_city']
     
-    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    def get_profile_icon(self, obj):
+        print("profile_icon -- ", obj.profile_icon)
+        if obj.profile_icon:
+            return obj.profile_icon.url
+        else:
+            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    profile_icon = serializers.SerializerMethodField()
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed', 'user_type']
-
-    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed', 'user_type', 'email_trigger', 'sms_trigger']
+    
+    def get_profile_icon(self, obj):
+        if obj.profile_icon:
+            return obj.profile_icon.url
+        else:
+            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
 
 
 class UserSelectLocationSerializer(serializers.ModelSerializer):
@@ -410,10 +425,10 @@ class GymDetailsSerializer(serializers.ModelSerializer):
         return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
     
     def get_feature(self, obj):
-        return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position")[:6], many=True).data
+        return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position"), many=True).data
     
     def get_equipment(self, obj):
-        return GymEquipmentSerializer(obj.gymequipment_set.filter(status='A').order_by("position")[:6], many=True).data
+        return GymEquipmentSerializer(obj.gymequipment_set.filter(status='A').order_by("position"), many=True).data
     
     def get_gymtiming(self, obj):
         return GymTimingSerializer(obj.gymtiming_set.filter(status='A').order_by("position"), many=True).data
@@ -487,11 +502,18 @@ class GymNameListSerializer(serializers.ModelSerializer):
   
 
 class UserDetailsSerializer(serializers.ModelSerializer):
+    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    profile_icon = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name', 'last_name', 'mobile_number', 'profile_icon', 'email']
-    
-    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+
+    def get_profile_icon(self, obj):
+        if obj.profile_icon:
+            return obj.profile_icon.url
+        else:
+            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
 
 
 class GymReviewSerializer(serializers.ModelSerializer):

@@ -64,6 +64,11 @@ FREE_SESSION_STATUS_CHOICES = [
         ('R', 'Rejected')
     ]
 
+DELETE_ACCOUNT_CHOICES = [
+        ('A', 'Active'),
+        ('C', 'Cancel')
+    ]
+
 
 def generate_referral_code():
     return uuid.uuid4().hex[:10].upper()
@@ -91,6 +96,8 @@ class CustomUser(AbstractUser):
     referral_code = models.CharField(max_length=12, unique=True, default=generate_referral_code)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='P')
     user_type = models.CharField(max_length=2, choices=USER_TYPE_CHOICES, default='U')
+    email_trigger = models.BooleanField(default=True)
+    sms_trigger = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -245,8 +252,17 @@ class FreeSessionRequest(models.Model):
             redeem_data = redeem_free_session(self.user, {})    
             if redeem_data.get("status") == "error":
                 raise ValidationError("Not match referral count or sessoon already redeem")
-        
-# def save_model(self, request, obj, form, change):
-#     obj.full_clean()  # triggers clean()
-#     super().save_model(request, obj, form, change)
+            
+
+class AccountDeleteRequest(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    request_reason = models.TextField(null=True, blank=True)
+    requested_on = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=2, choices=DELETE_ACCOUNT_CHOICES, default='A')
+    
+    class Meta:
+        ordering = ['-requested_on']
+
+    def __str__(self):
+        return f"{self.user}"
 

@@ -24,3 +24,5 @@ class GymFeatureSerializer(serializers.ModelSerializer):
     class Meta:
         model = GymFeature
         fields = ['id', 'name', 'icon', 'details']
+
+    icon = serializers.ImageField(use_url=True, required=False, allow_null=True)

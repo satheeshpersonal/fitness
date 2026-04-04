@@ -103,4 +103,4 @@ class SetGoal(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.gym.goal_type
+        return self.user.username

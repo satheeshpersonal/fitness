@@ -30,6 +30,7 @@ class CustomUserAdmin(UserAdmin):
         'created_at',
         "get_otp"
     )
+    list_editable = ('user_type',)
 
     def get_otp(self, obj):
         otp = UserOTP.objects.filter(user=obj).order_by("-created_at").first()

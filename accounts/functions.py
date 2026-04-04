@@ -77,7 +77,8 @@ ALLOWED_EMAIL_DOMAINS = {
     "zoho.com",
     "gmx.com",
     "mail.com",
-    "rediffmail.com"
+    "rediffmail.com",
+    "fitzz.in"
 }
 
 def validate_email(email):

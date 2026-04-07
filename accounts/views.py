@@ -365,44 +365,7 @@ class GymCreateView(APIView):
         gym_input_data = request.data
         user_data = request.user
         gym_id = gym_input_data.get("gym_id", None)
-        if not gym_id: #if create time
-            if user_data.user_type == "G": #if Gym owner
-                owner_data = request.user
-            elif user_data.user_type in ("E", "A"): #if Executive or Admin
-                data = {}
-                email = gym_input_data.get("owner_email")
-                mobile_number = gym_input_data.get("owner_mobile_number")
-                gym_user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False), user_type="G").first()
-                if gym_user_data:
-                    owner_data = gym_user_data
-                else:
-                    if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
-                        error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
-                        return Response(error_data, status=200)
-                
-                    if mobile_number:
-                        data["username"] = mobile_number 
-                        data["login_type"] = "M" 
-                    else:
-                        data["username"] = email 
-                        data["login_type"] = "E" 
-                    data["user_type"] = "G" 
-                    serializer = CustomUserSerializer(data=data)
-                    if serializer.is_valid():
-                        owner_data = serializer.save()
-                    else:
-                        print(serializer.errors)
-                        error_data =  error_response(message=serializer.errors, code="error", data={})
-                        return Response(error_data, status=200)
-                    
-            else:
-                error_data =  error_response(message="Invalid user type", code="error", data={})
-                return Response(error_data, status=200)
-        # print(gym_input_data)
-        if hasattr(gym_input_data, "_mutable") and not gym_input_data._mutable and not request.FILES:
-            gym_input_data._mutable = True
-            # print(gym_input_data)
-        
+
         if gym_id:
             gym_data = Gym.objects.filter(Q(created_by=user_data)|Q(owner=user_data), gym_id=gym_input_data.get("gym_id", None)).first()
             if not gym_data:
@@ -412,8 +375,56 @@ class GymCreateView(APIView):
                 error_data =  error_response(message="Gym Already approved, Please contact admin to edit it.", code="error", data={})
                 return Response(error_data, status=200)
             
-            # print(request.data.getlist('feature_ids'))
-            # serializer=GymCreateSerializer(gym_data, data = gym_input_data, partial=True, context={"user_data": user_data})
+
+        # if not gym_id: #if create time
+        if user_data.user_type == "G": #if Gym owner
+            owner_data = request.user
+        elif user_data.user_type in ("E", "A"): #if Executive or Admin
+            data = {}
+            email = gym_input_data.get("owner_email")
+            mobile_number = gym_input_data.get("owner_mobile_number")
+            if gym_input_data.get("owner_full_name", None):
+                # print("owner_full_name", gym_input_data.get("owner_full_name", "None"))
+                name_parts = gym_input_data.get("owner_full_name").split()
+                data["first_name"] = name_parts[0]
+                data["last_name"] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+            gym_user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False), user_type="G").first()
+            if gym_user_data:
+                owner_data = gym_user_data
+                serializer = CustomUserSerializer(gym_user_data, data=data, partial=True)
+                if serializer.is_valid():
+                    owner_data = serializer.save()
+            else:
+                if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
+                    error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
+                    return Response(error_data, status=200)
+
+                if mobile_number:
+                    data["username"] = mobile_number 
+                    data["login_type"] = "M" 
+                else:
+                    data["username"] = email
+                    data["email"] = email
+                    data["login_type"] = "E"
+                data["user_type"] = "G" 
+                serializer = CustomUserSerializer(data=data)
+                if serializer.is_valid():
+                    owner_data = serializer.save()
+                else:
+                    print(serializer.errors)
+                    error_data =  error_response(message=serializer.errors, code="error", data={})
+                    return Response(error_data, status=200)
+                
+        else:
+            error_data =  error_response(message="Invalid user type", code="error", data={})
+            return Response(error_data, status=200)
+        # print(gym_input_data)
+        if hasattr(gym_input_data, "_mutable") and not gym_input_data._mutable and not request.FILES:
+            gym_input_data._mutable = True
+            # print(gym_input_data)
+        
+        if gym_id:
             serializer = GymOptionsSerializer(instance=gym_data, data=request.data,context={'request': request}, partial=True)
             
         else:

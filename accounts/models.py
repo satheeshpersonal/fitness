@@ -266,3 +266,25 @@ class AccountDeleteRequest(models.Model):
     def __str__(self):
         return f"{self.user}"
 
+
+class BankDetail(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    account_holder_name = models.CharField(max_length=255)
+    bank_name = models.CharField(max_length=255)
+    account_number = models.CharField(max_length=30)
+    ifsc_code = models.CharField(max_length=11)
+
+    # optional
+    branch = models.CharField(max_length=255, blank=True, null=True)
+    upi_id = models.CharField(max_length=100, blank=True, null=True)
+
+    # verification status
+    is_verified = models.BooleanField(default=False)
+    status = models.CharField(max_length=2, choices=FREE_SESSION_STATUS_CHOICES, default='P')
+
+    # audit fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.account_holder_name} - {self.bank_name}"

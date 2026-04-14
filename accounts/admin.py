@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 
 # Register your models here.
-from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest, UserOTP, AccountDeleteRequest
+from .models import CustomUser, Gym, GymMedia, GymTiming, GymEquipment, GymReview, GymFavorite, UserSelectLocation, FreeSessionRequest, UserOTP, AccountDeleteRequest, BankDetail
 
 
 # Inline admin for user select locaiotn
@@ -203,6 +203,25 @@ class AccountDeleteRequestAdmin(admin.ModelAdmin):
     ordering = ('-requested_on',)
 
 
+class BankDetailAdmin(admin.ModelAdmin):
+    # list_display_links = None
+    list_display = (
+        'user',
+        'account_holder_name',
+        'bank_name',
+        'account_number',
+        'ifsc_code',
+        'is_verified',
+        'status'
+    )
+
+    # Make fields searchable
+    search_fields = ('user', 'account_holder_name', 'bank_name', 'account_number', 'ifsc_code',)
+    list_filter = ('user', )
+
+    list_editable = ('is_verified','status',)
+    ordering = ('-created_at',)
+
 
 admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(Gym, GymAdmin)
@@ -210,6 +229,7 @@ admin.site.register(GymReview, GymReviewAdmin)
 admin.site.register(GymFavorite, GymFavoriteAdmin)
 admin.site.register(FreeSessionRequest, FreeSessionRequestAdmin)
 admin.site.register(AccountDeleteRequest, AccountDeleteRequestAdmin)
+admin.site.register(BankDetail, BankDetailAdmin)
 
 
 

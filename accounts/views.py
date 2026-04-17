@@ -395,7 +395,7 @@ class GymCreateView(APIView):
                 serializer = CustomUserSerializer(gym_user_data, data=data, partial=True)
                 if serializer.is_valid():
                     owner_data = serializer.save()
-            else:
+            elif not gym_id:
                 if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
                     error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
                     return Response(error_data, status=200)

@@ -330,11 +330,12 @@ class GymOptionsSerializer(serializers.ModelSerializer):
                 item = media_dict[index]
                 media_id = item.get("id")
                 gym_image = item.get("file")
-                if gym_image:
+                if gym_image and hasattr(gym_image, "read"):
                     gym_image = self.convert_to_webp(gym_image)
 
                 if media_id:
                     media_obj = GymMedia.objects.get(id=media_id, gym=gym)
+                    # media_obj.pop("media", None)
                     media_obj.name = item.get("name", media_obj.name)
                     media_obj.description = item.get("description", media_obj.description)
                     media_obj.position = item.get("position", media_obj.position)

@@ -44,6 +44,18 @@ class CustomUserAdmin(UserAdmin):
     # Make fields searchable
     search_fields = ('username', 'mobile_number', 'email', 'first_name', 'last_name',)
 
+    fieldsets = UserAdmin.fieldsets + (
+        ("Personal info", {
+            "fields": ("mobile_number", "user_type"),
+        }),
+    )
+
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ("Personal info", {
+            "fields": ("mobile_number", "user_type"),
+        }),
+    )
+
 
 
 # Inline admin for GymMedia

@@ -381,20 +381,26 @@ class GymCreateView(APIView):
             owner_data = request.user
         elif user_data.user_type in ("E", "A"): #if Executive or Admin
             data = {}
-            email = gym_input_data.get("owner_email")
-            mobile_number = gym_input_data.get("owner_mobile_number")
+            email = gym_input_data.get("owner_email", None)
+            mobile_number = gym_input_data.get("owner_mobile_number", None)
             if gym_input_data.get("owner_full_name", None):
                 # print("owner_full_name", gym_input_data.get("owner_full_name", "None"))
                 name_parts = gym_input_data.get("owner_full_name").split()
                 data["first_name"] = name_parts[0]
                 data["last_name"] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
 
-            gym_user_data = CustomUser.objects.filter(Q(mobile_number = mobile_number, mobile_number__isnull=False) | Q(email__iexact = email, email__isnull=False), user_type="G").first()
+            # print(CustomUser.objects.filter(Q(mobile_number = mobile_number) | Q(email__iexact = email), user_type="G").query)
+            gym_user_data = CustomUser.objects.filter((Q(mobile_number = mobile_number) & Q(mobile_number__isnull=False) & ~Q(mobile_number='')) | (Q(email__iexact = email) & Q(email__isnull=False) & ~Q(email='')), user_type="G").first()
+            
             if gym_user_data:
+                print("get user", email, mobile_number, gym_user_data)
                 owner_data = gym_user_data
                 serializer = CustomUserSerializer(gym_user_data, data=data, partial=True)
                 if serializer.is_valid():
                     owner_data = serializer.save()
+                    print(owner_data)
+                else:
+                    print(serializer.errors)
             elif not gym_id:
                 if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
                     error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
@@ -402,6 +408,7 @@ class GymCreateView(APIView):
 
                 if mobile_number:
                     data["username"] = mobile_number 
+                    data["mobile_number"] = mobile_number 
                     data["login_type"] = "M" 
                 else:
                     data["username"] = email
@@ -459,8 +466,8 @@ class GymListView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        offset = int(self.request.query_params.get('offset', 0))
-        limit = int(self.request.query_params.get('limit', 20))
+        offset = self.request.query_params.get('offset', None)
+        limit = self.request.query_params.get('limit', None)
         data = request.data
         
         user_data = {}
@@ -513,14 +520,15 @@ class GymListView(APIView):
             print(gym.distance)
 
         # Sort by distance
-        sorted_gyms = sorted(gym_with_distance, key=lambda x: x.distance)
+        paginated = sorted_gyms = sorted(gym_with_distance, key=lambda x: x.distance)
 
         print(sorted_gyms)
 
         # Pagination
-        offset = int(request.GET.get('offset', 0))
-        limit = int(request.GET.get('limit', 20))
-        paginated = sorted_gyms[offset:offset + limit]
+        if offset and limit:
+            offset = int(offset)
+            limit = int(limit)
+            paginated = sorted_gyms[offset:offset + limit]
 
         
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})

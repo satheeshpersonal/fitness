@@ -26,7 +26,8 @@ CURRENCY_CHOICES = [
 
 PREMIUM_TYPE_CHOICES = [
         ('B', 'Basic'),
-        ('V', 'VIP')
+        ('V', 'VIP'),
+        ('E', 'Elite')
     ]
 
 USER_TYPE_CHOICES = [

@@ -15,6 +15,7 @@ import uuid
 from django.db.models import Sum
 from lookups.functions import send_template_email
 from datetime import datetime
+from lookups.firebase_service import send_push_notification
 # Create your views here.
 
 
@@ -103,6 +104,10 @@ class GymAccessView(APIView):
                 except Exception as e:
                     print("The payment email error : ",e)  
 
+                # Send Notification 
+                send_notification = send_push_notification(gym_data.owner.fire_base_token, user_data.first_name, "New Fitzz Check-In 💪", "member checked in successfully")
+                print("send_notification - ", send_notification)
+
                 success_data =  success_response(message="Successfully accessed", code="success", data=gym_log_data)
                 return Response(success_data, status=200) 
             else:
@@ -131,7 +136,7 @@ class GymSessionView(APIView):
             gym_access = GymAccessLog.objects.filter(gym__owner = user_data, gym__gym_id = gym_id).order_by("-access_date")
         else:
             gym_access = GymAccessLog.objects.filter(gym__owner = user_data).order_by("-access_date")
-
+        
         pending_payout = gym_access.exclude(settled_status='PR').aggregate(total=Sum('amount'))['total'] or "0.00"
         extra_data["pending_payout"] = pending_payout
 

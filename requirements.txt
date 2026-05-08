@@ -15,6 +15,7 @@ django-cors-headers==4.9.0
 django-storages==1.14.6
 djangorestframework==3.16.0
 docutils==0.21.2
+firebase_admin==7.4.0
 geographiclib==2.0
 geopy==2.4.1
 idna==3.10
@@ -37,4 +38,3 @@ tabulate==0.9.0
 tqdm==4.67.1
 types-python-dateutil==2.9.0.20250708
 urllib3==2.4.0
-

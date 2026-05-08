@@ -257,6 +257,10 @@ class verifyOTPView(APIView):
                 # cancel delete request login in between - if any 
                 cancel_delete_request = AccountDeleteRequest.objects.filter(user = user_data, status = 'A').update(status='C')
 
+                # update fire base token if comes
+                if data.get("fire_base_token", None):
+                    CustomUser.objects.filter(id = user_data.id, status = 'A').update(fire_base_token=data.get("fire_base_token"))
+
                 success_data =  success_response(message=f"User account verified successfully", code="success", data=user_details)
                 return Response(success_data, status=200) 
                 # return Response(user_details.datas, status=status.HTTP_201_CREATED)
@@ -570,6 +574,7 @@ class OwnerGymListView(APIView):
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
         
         success_data =  success_response(message=f"success", code="success", data=serializer.data)
+
         return Response(success_data, status=200)
 
 

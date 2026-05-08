@@ -99,6 +99,7 @@ class CustomUser(AbstractUser):
     user_type = models.CharField(max_length=2, choices=USER_TYPE_CHOICES, default='U')
     email_trigger = models.BooleanField(default=True)
     sms_trigger = models.BooleanField(default=True)
+    fire_base_token = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

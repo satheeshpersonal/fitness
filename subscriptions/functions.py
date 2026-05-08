@@ -74,7 +74,7 @@ def get_count_data(user_id):
     from workouts.models import WorkoutSchedule, GymAccessLog
     
     try:
-        user_subscription = UserSubscription.objects.filter(user=user_id, is_active=True).values('expire_on', 'sessions_left').order_by("-id").first()
+        user_subscription = UserSubscription.objects.filter(user=user_id, is_active=True).values('expire_on', 'sessions_left', 'plan__premim_type').order_by("-id").first()
 
         if user_subscription:
             user_subscription["access_left"] = user_subscription.pop("sessions_left")

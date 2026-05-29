@@ -112,6 +112,9 @@ def send_template_email(template_key, emails, param):
     elif template_key == "access_session":
         template_id = 4
         cc_email = ["admin@fitzz.in"]
+    elif template_key == "access_session_gym_owner":
+        template_id = 6
+        cc_email = ["admin@fitzz.in"]
     
     if template_id>0:
         Thread(

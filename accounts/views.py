@@ -496,6 +496,8 @@ class GymListView(APIView):
         user_location = (float(data["latitude"]), float(data["longitude"]))
 
         gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
+
+        gym_count = gym_list.count()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')
 
         # # city filter 
@@ -538,7 +540,7 @@ class GymListView(APIView):
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
         # print(serializer.data)
         
-        success_data =  success_response(message=f"success", code="success", data=serializer.data)
+        success_data =  success_response(message=f"success", code="success", data=serializer.data, extra_data={"total_gym": gym_count})
         return Response(success_data, status=200)
     
 

@@ -279,7 +279,7 @@ class DeleteAccountView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):        
-        user_data = UserSelectLocation.objects.filter(id = request.user.id)
+        user_data = CustomUser.objects.filter(id = request.user.id)
         if user_data:
             AccountDeleteRequest.objects.create(user=request.user, request_reason="")
             success_data =  success_response(message=f"Request submitted successfully", code="success", data={})

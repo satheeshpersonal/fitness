@@ -30,7 +30,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     profile_icon = serializers.SerializerMethodField()
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed', 'user_type', 'email_trigger', 'sms_trigger']
+        fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed', 'user_type', 'login_type', 'referral_code', 'email_trigger', 'sms_trigger', 'ip_country', 'ip_state', 'ip_city', 'fire_base_token']
     
     def get_profile_icon(self, obj):
         if obj.profile_icon:

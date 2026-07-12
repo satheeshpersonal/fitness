@@ -72,13 +72,17 @@ class GymAccessView(APIView):
                 # print(sessions_left_value["sessions_left"])
                 error_data =  error_response(message="Please enroll class to continue your workout", code="no_session", data={})
                 return Response(error_data, status=200) 
-                
-            print(sessions_left_value.sessions_left)
+            
+            # print(sessions_left_value.sessions_left)
             gym_data = Gym.objects.filter(gym_id=request_data["gym_id"], status='A').first()
             if not gym_data:
                 error_data =  error_response(message="Gym is not valid, Please try again sometime", code="not_found", data={})
                 return Response(error_data, status=200)
             
+            if (sessions_left_value.plan.premim_type == "B" and gym_data.premium_type in ["V", "E"]) or (sessions_left_value.plan.premim_type == "V" and gym_data.premium_type == "E"):
+                error_data =  error_response(message="Your current plan doesn't include access to this gym. Please upgrade your plan to continue.", code="plan_upgrade_required", data={})
+                return Response(error_data, status=200)
+
             request_data["gym"] = gym_data.id
             request_data["amount"] = gym_data.per_session_cost
             request_data["user"] = user_data.id
@@ -95,18 +99,26 @@ class GymAccessView(APIView):
                 except Exception as e:
                     print("The create_workout error : ",e)
                 
-                #send email
+                #send email to user
                 try:
                     access_date = datetime.fromisoformat(gym_log_data["access_date"])
-                    emails = {"to_email":[user_data.email]} # to-email and cc-email will add as array
-                    param = {"gym_name": gym_log_data["gym"]["gym_name"], "session_date":access_date.strftime("%d %b %Y %I:%M %p"), "gym_address":f'{gym_log_data["gym"]["address"]}, {gym_log_data["gym"]["city"]}, {gym_log_data["gym"]["state"]}'} #all email parameters
-                    send_template_email("access_session", emails, param)
+                    if user_data.email:
+                        emails = {"to_email":[user_data.email]} # to-email and cc-email will add as array
+                        param = {"gym_name": gym_log_data["gym"]["gym_name"], "session_date":access_date.strftime("%d %b %Y %I:%M %p"), "gym_address":f'{gym_log_data["gym"]["address"]}, {gym_log_data["gym"]["city"]}, {gym_log_data["gym"]["state"]}'} #all email parameters
+                        send_template_email("access_session", emails, param)
                 except Exception as e:
-                    print("The payment email error : ",e)  
+                    print("The payment email error : ",e)
 
-                # Send Notification 
-                send_notification = send_push_notification(gym_data.owner.fire_base_token, user_data.first_name, "New Fitzz Check-In 💪", "member checked in successfully")
-                print("send_notification - ", send_notification)
+                # Send Notification to gym owner
+                if gym_data.owner.fire_base_token:
+                    send_notification = send_push_notification(gym_data.owner.fire_base_token, user_data.first_name, "New Fitzz Check-In 💪", "member checked in successfully")
+                    print("send_notification - ", send_notification)
+
+                #Send email to gym owner
+                if gym_data.owner.email:
+                    owner_emails = {"to_email":[gym_data.owner.email]}
+                    param["user_name"] = user_data.first_name
+                    send_template_email("access_session_gym_owner", owner_emails, param)
 
                 success_data =  success_response(message="Successfully accessed", code="success", data=gym_log_data)
                 return Response(success_data, status=200) 

@@ -453,9 +453,9 @@ class GymDetailsSerializer(serializers.ModelSerializer):
 
 
 class GymListSerializer(serializers.ModelSerializer):
-    media = serializers.SerializerMethodField()
-    feature = serializers.SerializerMethodField()
-    gymowner = serializers.SerializerMethodField()
+    media = GymMediaSerializer(source="gymmedia_set", many=True, read_only=True)
+    feature = GymFeatureSerializer(many=True, read_only=True)
+    gymowner = GymOwnerSerializer(source="owner", read_only=True)
     distance = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     favorites = serializers.SerializerMethodField()
@@ -465,28 +465,29 @@ class GymListSerializer(serializers.ModelSerializer):
         model = Gym
         fields = ['id', 'gym_id', 'name', 'description', 'address', 'city', 'state', 'premium_type', 'media', 'feature', 'gymowner', 'distance', 'rating', 'favorites', 'status']
 
-    def get_media(self, obj):
-        return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
+    # def get_media(self, obj):
+    #     return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
     
-    def get_feature(self, obj):
-        return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position"), many=True).data
+    # def get_feature(self, obj):
+    #     return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position"), many=True).data
     
-    def get_gymowner(self, obj):
-        return GymOwnerSerializer(obj.owner).data
+    # def get_gymowner(self, obj):
+    #     return GymOwnerSerializer(obj.owner).data
 
     def get_distance(self, obj):
-        return getattr(obj, 'distance', None)
+        return getattr(obj, "distance", None)
     
     def get_rating(self, obj):
         # reviews = obj.gymreview_set.all()
-        reviews = list(obj.gymreview_set.all())
-        if not reviews:
+        reviews = getattr(obj, "_prefetched_objects_cache", {}).get("gymreview_set")
+        if reviews is None:
+            reviews = obj.gymreview_set.all()
+        total = len(reviews)
+        if total == 0:
             return {
                 "average": 0,
                 "total": 0
             }
-
-        total = len(reviews)
         average = round(sum(r.rating for r in reviews) / total, 1)
         return {"average":average, "total":total}
         # return {"average":0, "total":0}
@@ -497,8 +498,12 @@ class GymListSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             return False
 
-        # return GymFavorite.objects.filter(user=user,gym=obj).exists()
-        return obj.favorited_users.filter(user=user).exists()
+        favorites = getattr(obj, "_prefetched_objects_cache", {}).get(
+            "favorited_users"
+        )
+        if favorites is None:
+            return obj.favorited_users.filter(user=user).exists()
+        return any(f.user_id == user.id for f in favorites)
 
 
 class GymNameListSerializer(serializers.ModelSerializer):

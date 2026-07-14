@@ -2,14 +2,13 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
-from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest, AccountDeleteRequest
+from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest, AccountDeleteRequest, GymMedia, GymFeature
 from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer, GymNameListSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
 from workouts.models import GymAccessLog
 from django.shortcuts import get_object_or_404
 from .functions import generte_top, send_otp, gym_response, referral_data_update, validate_email, verify_msg91_token
-from django.db.models import Q
 from django.utils import timezone
 from FitnessApp.utils.response import success_response, error_response
 from rest_framework.authtoken.models import Token
@@ -17,8 +16,9 @@ from lookups.functions import send_template_email
 from geopy.distance import geodesic
 from subscriptions.functions import get_count_data
 from workouts.functions import get_last_activity
-from django.db.models import Avg, Count, Sum
+from django.db.models import Avg, Count, Sum, Q, Prefetch
 from datetime import date
+import time
 # Create your views here.
 
 
@@ -470,6 +470,9 @@ class GymListView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        total = time.time()
+        print("===== API START =====")
+
         offset = self.request.query_params.get('offset', None)
         limit = self.request.query_params.get('limit', None)
         data = request.data
@@ -478,7 +481,7 @@ class GymListView(APIView):
         if request.user.is_authenticated:
             user_data = request.user
         
-        print("user_data", user_data)
+        # print("user_data", user_data)
         # if request.user.is_authenticated:
         #     #get user's current active location
         #     select_location = UserSelectLocation.objects.filter(user = request.user.id, status='A').first()
@@ -495,16 +498,23 @@ class GymListView(APIView):
             return Response(error_data, status=200)
         user_location = (float(data["latitude"]), float(data["longitude"]))
 
+        t = time.time()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
         gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
                     .prefetch_related(
-                            "gymmedia_set",
-                            "feature",
+                            Prefetch(
+                                "gymmedia_set",
+                                queryset=GymMedia.objects.order_by("position"),
+                            ),
+                            Prefetch(
+                                "feature",
+                                queryset=GymFeature.objects.filter(status="A").order_by("position"),
+                            ),
                             "gymreview_set",
                             "favorited_users",
-                        )
+                                            )
                 )
-
+        print("Query:", time.time() - t)
         gym_count = gym_list.count()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')
 
@@ -531,12 +541,12 @@ class GymListView(APIView):
             gym.distance = round(distance_km, 2)
             gym_with_distance.append(gym)
 
-            print(gym.distance)
+            # print(gym.distance)
 
         # Sort by distance
         paginated = sorted_gyms = sorted(gym_with_distance, key=lambda x: x.distance)
 
-        print(sorted_gyms)
+        # print(sorted_gyms)
 
         # Pagination
         if offset and limit:
@@ -544,11 +554,19 @@ class GymListView(APIView):
             limit = int(limit)
             paginated = sorted_gyms[offset:offset + limit]
 
-        
+        t = time.time()
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
+        print("Serializer:", time.time() - t)
         # print(serializer.data)
+
+        t = time.time()
+        serialized_data = serializer.data
+        print("serializer.data:", time.time() - t)
         
-        success_data =  success_response(message=f"success", code="success", data=serializer.data, extra_data={"total_gym": gym_count})
+        t = time.time()
+        success_data =  success_response(message=f"success", code="success", data=serialized_data, extra_data={"total_gym": gym_count})
+        print("Response Build:", time.time() - t)
+        print("TOTAL:", time.time() - total)
         return Response(success_data, status=200)
     
 

@@ -119,13 +119,13 @@ class UserOTP(models.Model):
 
 
 class Gym(models.Model):
-    gym_id = models.UUIDField(default=uuid.uuid4) #use for QR code
+    gym_id = models.UUIDField(default=uuid.uuid4, db_index=True) #use for QR code
     owner = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='gyms')
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
+    city = models.CharField(max_length=100, db_index=True)
+    state = models.CharField(max_length=100, db_index=True)
     country = models.CharField(max_length=100)
     zip_code = models.CharField(max_length=50, null=True, blank=True)
     latitude = models.FloatField(null=True, blank=True)
@@ -134,9 +134,9 @@ class Gym(models.Model):
     profile_icon = CloudinaryField('image', null=True, blank=True)
     per_session_cost = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3,  choices=CURRENCY_CHOICES, default='INR')
-    premium_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
+    premium_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B', db_index=True)
     feature = models.ManyToManyField(GymFeature, null=True, blank=True) 
-    status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='P')
+    status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='P', db_index=True)
     verified_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, null=True, blank=True, related_name='verified_by')
     verified_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_by')

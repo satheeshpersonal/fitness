@@ -495,7 +495,15 @@ class GymListView(APIView):
             return Response(error_data, status=200)
         user_location = (float(data["latitude"]), float(data["longitude"]))
 
-        gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
+        # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
+        gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
+                    .prefetch_related(
+                            "gymmedia_set",
+                            "feature",
+                            "gymreview_set",
+                            "favorited_users",
+                        )
+                )
 
         gym_count = gym_list.count()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')

@@ -478,21 +478,27 @@ class GymListSerializer(serializers.ModelSerializer):
         return getattr(obj, 'distance', None)
     
     def get_rating(self, obj):
-        reviews = obj.gymreview_set.all()
-        if reviews:
-            total = len(reviews)
-            average = round(sum(r.rating for r in reviews) / total, 1)
-            return {"average":average, "total":total}
+        # reviews = obj.gymreview_set.all()
+        reviews = list(obj.gymreview_set.all())
+        if not reviews:
+            return {
+                "average": 0,
+                "total": 0
+            }
 
-        return {"average":0, "total":0}
+        total = len(reviews)
+        average = round(sum(r.rating for r in reviews) / total, 1)
+        return {"average":average, "total":total}
+        # return {"average":0, "total":0}
     
     def get_favorites(self, obj):
         user = self.context.get("user")
-        print("user - ", user)
+        # print("user - ", user)
         if not user or not user.is_authenticated:
             return False
 
-        return GymFavorite.objects.filter(user=user,gym=obj).exists()
+        # return GymFavorite.objects.filter(user=user,gym=obj).exists()
+        return obj.favorited_users.filter(user=user).exists()
 
 
 class GymNameListSerializer(serializers.ModelSerializer):

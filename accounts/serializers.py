@@ -407,35 +407,68 @@ class GymOptionsSerializer(serializers.ModelSerializer):
 
 
 class GymDetailsSerializer(serializers.ModelSerializer):
-    media = serializers.SerializerMethodField()
-    feature = serializers.SerializerMethodField()
-    equipment = serializers.SerializerMethodField()
-    gymtiming = serializers.SerializerMethodField()
-    gymowner = serializers.SerializerMethodField()
-    # rating = serializers.SerializerMethodField()
-    # distance_km = serializers.SerializerMethodField()
+    # media = serializers.SerializerMethodField()
+    # feature = serializers.SerializerMethodField()
+    # equipment = serializers.SerializerMethodField()
+    # gymtiming = serializers.SerializerMethodField()
+    # gymowner = serializers.SerializerMethodField()
+    # # rating = serializers.SerializerMethodField()
+    # # distance_km = serializers.SerializerMethodField()
+    media = GymMediaSerializer(
+        source="gymmedia_set",
+        many=True,
+        read_only=True,
+    )
+
+    feature = GymFeatureSerializer(
+        many=True,
+        read_only=True,
+    )
+
+    equipment = GymEquipmentSerializer(
+        source="gymequipment_set",
+        many=True,
+        read_only=True,
+    )
+
+    gymtiming = GymTimingSerializer(
+        source="gymtiming_set",
+        many=True,
+        read_only=True,
+    )
+
+    gymowner = GymOwnerSerializer(
+        source="owner",
+        read_only=True,
+    )
+
+    profile_icon = serializers.ImageField(
+        use_url=True,
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Gym
         fields = ['id', 'gym_id', 'profile_icon', 'name', 'description', 'address', 'city', 'state', 'country', 'zip_code', 'latitude', 'longitude', 'premium_type', 'media', 'feature', 'equipment', 'gymtiming', 'gymowner', 'status', 'per_session_cost', 'currency' #distance_km, 'rating'
         ]
 
-    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
-    def get_media(self, obj):
-        return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
+    # def get_media(self, obj):
+    #     return GymMediaSerializer(obj.gymmedia_set.all().order_by("position"), many=True).data
     
-    def get_feature(self, obj):
-        return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position"), many=True).data
+    # def get_feature(self, obj):
+    #     return GymFeatureSerializer(obj.feature.filter(status='A').order_by("position"), many=True).data
     
-    def get_equipment(self, obj):
-        return GymEquipmentSerializer(obj.gymequipment_set.filter(status='A').order_by("position"), many=True).data
+    # def get_equipment(self, obj):
+    #     return GymEquipmentSerializer(obj.gymequipment_set.filter(status='A').order_by("position"), many=True).data
     
-    def get_gymtiming(self, obj):
-        return GymTimingSerializer(obj.gymtiming_set.filter(status='A').order_by("position"), many=True).data
+    # def get_gymtiming(self, obj):
+    #     return GymTimingSerializer(obj.gymtiming_set.filter(status='A').order_by("position"), many=True).data
     
-    def get_gymowner(self, obj):
-        return GymOwnerSerializer(obj.owner).data
+    # def get_gymowner(self, obj):
+    #     return GymOwnerSerializer(obj.owner).data
 
     # def get_rating(self, obj):
     #     reviews = obj.gymreview_set.all()

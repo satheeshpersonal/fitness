@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
-from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest, AccountDeleteRequest, GymMedia, GymFeature
+from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, GymReview, Referral, FreeSessionRequest, FreeSessionRequest, AccountDeleteRequest, GymMedia, GymFeature, GymEquipment, GymTiming
 from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer, GymNameListSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
@@ -19,6 +19,7 @@ from workouts.functions import get_last_activity
 from django.db.models import Avg, Count, Sum, Q, Prefetch
 from datetime import date
 import time
+
 # Create your views here.
 
 
@@ -345,20 +346,68 @@ class GymView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, gym_id):
-        if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"): #if Executive or Admin
-            gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
+        # if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"): #if Executive or Admin
+        #     gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
+        # else:
+        #     gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
+        t = time.time()
+        total = time.time()
+        gym_queryset = Gym.objects.select_related("owner").prefetch_related(
+            Prefetch(
+                "gymmedia_set",
+                queryset=GymMedia.objects.order_by("position")
+            ),
+            Prefetch(
+                "feature",
+                queryset=GymFeature.objects.filter(status="A").order_by("position")
+            ),
+            Prefetch(
+                "gymequipment_set",
+                queryset=GymEquipment.objects.filter(status="A").order_by("position")
+            ),
+            Prefetch(
+                "gymtiming_set",
+                queryset=GymTiming.objects.filter(status="A").order_by("position")
+            ),
+        )
+        print("Queryset Build:", time.time() - t)
+
+        t = time.time()
+        if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"):
+            gym_data = gym_queryset.filter(
+                Q(owner=request.user) | Q(created_by=request.user),
+                gym_id=gym_id,
+            ).first()
         else:
-            gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
-        if gym_data:
-            data = GymDetailsSerializer(gym_data).data
-            data["favorite"] = False
-            if request.user.is_authenticated and GymFavorite.objects.filter(user=request.user, gym_id = data["id"] ).exists():
-                data["favorite"] = True
-            success_data =  success_response(message=f"success", code="success", data=data)
-            return Response(success_data, status=200)
-        else:
+            gym_data = gym_queryset.filter(
+                gym_id=gym_id,
+                status="A",
+            ).first()
+        print("Fetch Gym:", time.time() - t)
+
+        t = time.time()
+        if not gym_data:
             error_data =  error_response(message="Gym data not found", code="not_found", data={})
             return Response(error_data, status=200)
+        
+        serializerdata = GymDetailsSerializer(gym_data)
+        print("Serializer:", time.time() - t)
+
+        t = time.time()
+
+        data = serializerdata.data
+
+        print("serializer.data:", time.time() - t)
+
+        t = time.time()
+        data["favorite"] = False
+        if request.user.is_authenticated and GymFavorite.objects.filter(user=request.user, gym_id = data["id"] ).exists():
+            data["favorite"] = True
+        success_data =  success_response(message=f"success", code="success", data=data)
+        print("Favorite:", time.time() - t)
+
+        print("TOTAL:", time.time() - total)
+        return Response(success_data, status=200)
 
 
 class GymCreateView(APIView):

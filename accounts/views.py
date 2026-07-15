@@ -350,8 +350,8 @@ class GymView(APIView):
         #     gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
         # else:
         #     gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
-        t = time.time()
-        total = time.time()
+        # t = time.time()
+        # total = time.time()
         gym_queryset = Gym.objects.select_related("owner").prefetch_related(
             Prefetch(
                 "gymmedia_set",
@@ -370,9 +370,8 @@ class GymView(APIView):
                 queryset=GymTiming.objects.filter(status="A").order_by("position")
             ),
         )
-        print("Queryset Build:", time.time() - t)
-
-        t = time.time()
+        # print("Queryset Build:", time.time() - t)
+        # t = time.time()
         if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"):
             gym_data = gym_queryset.filter(
                 Q(owner=request.user) | Q(created_by=request.user),
@@ -383,30 +382,25 @@ class GymView(APIView):
                 gym_id=gym_id,
                 status="A",
             ).first()
-        print("Fetch Gym:", time.time() - t)
-
-        t = time.time()
+        # print("Fetch Gym:", time.time() - t)
+        # t = time.time()
         if not gym_data:
             error_data =  error_response(message="Gym data not found", code="not_found", data={})
             return Response(error_data, status=200)
         
         serializerdata = GymDetailsSerializer(gym_data)
-        print("Serializer:", time.time() - t)
-
-        t = time.time()
-
+        # print("Serializer:", time.time() - t)
+        # t = time.time()
         data = serializerdata.data
-
-        print("serializer.data:", time.time() - t)
-
-        t = time.time()
+        # print("serializer.data:", time.time() - t)
+        # t = time.time()
         data["favorite"] = False
         if request.user.is_authenticated and GymFavorite.objects.filter(user=request.user, gym_id = data["id"] ).exists():
             data["favorite"] = True
         success_data =  success_response(message=f"success", code="success", data=data)
-        print("Favorite:", time.time() - t)
+        # print("Favorite:", time.time() - t)
 
-        print("TOTAL:", time.time() - total)
+        # print("TOTAL:", time.time() - total)
         return Response(success_data, status=200)
 
 
@@ -519,7 +513,7 @@ class GymListView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        total = time.time()
+        # total = time.time()
         print("===== API START =====")
 
         offset = self.request.query_params.get('offset', None)
@@ -547,7 +541,7 @@ class GymListView(APIView):
             return Response(error_data, status=200)
         user_location = (float(data["latitude"]), float(data["longitude"]))
 
-        t = time.time()
+        # t = time.time()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
         gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
                     .prefetch_related(
@@ -563,7 +557,7 @@ class GymListView(APIView):
                             "favorited_users",
                                             )
                 )
-        print("Query:", time.time() - t)
+        # print("Query:", time.time() - t)
         gym_count = gym_list.count()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')
 
@@ -603,19 +597,19 @@ class GymListView(APIView):
             limit = int(limit)
             paginated = sorted_gyms[offset:offset + limit]
 
-        t = time.time()
+        # t = time.time()
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
-        print("Serializer:", time.time() - t)
+        # print("Serializer:", time.time() - t)
         # print(serializer.data)
 
-        t = time.time()
+        # t = time.time()
         serialized_data = serializer.data
-        print("serializer.data:", time.time() - t)
+        # print("serializer.data:", time.time() - t)
         
-        t = time.time()
+        # t = time.time()
         success_data =  success_response(message=f"success", code="success", data=serialized_data, extra_data={"total_gym": gym_count})
-        print("Response Build:", time.time() - t)
-        print("TOTAL:", time.time() - total)
+        # print("Response Build:", time.time() - t)
+        # print("TOTAL:", time.time() - total)
         return Response(success_data, status=200)
     
 

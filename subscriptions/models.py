@@ -53,6 +53,12 @@ class SubscriptionPlan(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.plan_type}"
+    class Meta:
+        ordering = ["position"]
+
+        indexes = [
+            models.Index(fields=["status", "premim_type"]),
+        ]
     
 
 class PlanDetails(models.Model):
@@ -66,6 +72,10 @@ class PlanDetails(models.Model):
         return f"{self.details}"
     class Meta:
         ordering = ['position']   # 👈 default order
+        
+        indexes = [
+            models.Index(fields=["plan", "status"]),
+        ]
 
 
 class DicountCoupon(models.Model):

@@ -6,10 +6,11 @@ from FitnessApp.utils.response import success_response, error_response
 from django.utils import timezone
 from datetime import timedelta
 from decouple import config
-from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription
+from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription, PlanDetails
 from .serializers import SubscriptionHistorySerializer, SubscriptionPlanSerializer
 from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event, redeem_free_session
 from lookups.functions import send_template_email
+from django.db.models import Prefetch
 # from django.views.decorators.csrf import csrf_exempt
 # Create your views here.
 
@@ -25,7 +26,19 @@ class PlanView(APIView):
         filters = {}
         if premim_type:
             filters["premim_type"] = premim_type
-        plan_all = SubscriptionPlan.objects.filter(**filters, status = 'A').order_by("position")
+
+        # plan_all = SubscriptionPlan.objects.filter(**filters, status = 'A').order_by("position")
+        plan_all = (
+            SubscriptionPlan.objects
+            .filter(**filters)
+            .prefetch_related(
+                Prefetch(
+                    "plan_details",
+                    queryset=PlanDetails.objects.filter(status="A")
+                )
+            )
+        )
+
         plan_all_data = SubscriptionPlanSerializer(plan_all, many=True).data
         success_data =  success_response(message=f"success", code="success", data=plan_all_data)
         return Response(success_data, status=200)

@@ -44,6 +44,12 @@ class GymAccessLog(models.Model):
 
     def __str__(self):
         return self.gym.name
+    class Meta:
+        ordering = ["-access_date"]
+
+        indexes = [
+            models.Index(fields=["user", "access_date"]),
+        ]
 
 
 @receiver(post_save, sender=GymAccessLog)
@@ -59,7 +65,6 @@ def update_user_session_signal(sender, instance, created, **kwargs):
 
 
 class WorkoutSchedule(models.Model):
-
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE, null=True, blank=True)
     gym_access = models.ForeignKey(GymAccessLog, on_delete=models.CASCADE, null=True, blank=True)
@@ -76,10 +81,14 @@ class WorkoutSchedule(models.Model):
 
     def __str__(self):
         return f"{self.user.username}"
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "scheduled_at"]),
+        ]
     
 
 class WorkoutExercise(models.Model):
-    workout_schedule = models.ForeignKey(WorkoutSchedule, on_delete=models.CASCADE)
+    workout_schedule = models.ForeignKey(WorkoutSchedule, on_delete=models.CASCADE, related_name="exercises")
     exercise_name = models.CharField(max_length=100, null=True, blank=True)
     reps = models.IntegerField(null=True, blank=True)
     sets = models.IntegerField(null=True, blank=True)
@@ -91,6 +100,10 @@ class WorkoutExercise(models.Model):
 
     def __str__(self):
         return self.exercise_name
+    class Meta:
+        indexes = [
+            models.Index(fields=["workout_schedule", "status"]),
+        ]
     
 
 class SetGoal(models.Model):

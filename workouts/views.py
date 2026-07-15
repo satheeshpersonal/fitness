@@ -12,7 +12,7 @@ from .functions import create_workout
 from subscriptions.models import UserSubscription
 from .serializers import WorkoutScheduleSerializer, WorkoutExerciseSerializer
 import uuid
-from django.db.models import Sum
+from django.db.models import Sum, Prefetch
 from lookups.functions import send_template_email
 from datetime import datetime
 from lookups.firebase_service import send_push_notification
@@ -29,7 +29,12 @@ class GymAccessView(APIView):
     def get(self, request):
         # print(request.data)
         user_data = request.user
-        gym_access = GymAccessLog.objects.filter(user = user_data).order_by("-access_date")
+        # gym_access = GymAccessLog.objects.filter(user = user_data).order_by("-access_date")
+        gym_access = (
+            GymAccessLog.objects
+            .filter(user=request.user)
+            .select_related("gym", "user", "review")
+        )
         if gym_access:
             gym_accessa_data = GymAccessLogSerializer(gym_access, many=True).data
             success_data =  success_response(message="Success", code="success", data=gym_accessa_data)
@@ -191,12 +196,33 @@ class ScheduleListView(APIView):
 
     def get(self, request):
         # print(request.data)
-        sessio_type = request.query_params.get('type', 'u')  # u- upcoming , p- past 
-        user_data = request.user
-        if sessio_type == 'p': # Past session based on scheduled_at
-            workout_schedule = WorkoutSchedule.objects.filter(user = user_data, scheduled_at__lt=date.today()).order_by("-scheduled_at")
+        session_type = request.query_params.get('type', 'u')  # u- upcoming , p- past 
+        # user_data = request.user
+        # if sessio_type == 'p': # Past session based on scheduled_at
+        #     workout_schedule = WorkoutSchedule.objects.filter(user = user_data, scheduled_at__lt=date.today()).order_by("-scheduled_at")
+        # else:
+        #     workout_schedule = WorkoutSchedule.objects.filter(user = user_data, scheduled_at__gte=date.today()).order_by("-scheduled_at")
+        filters = {
+            "user": request.user
+        }
+        if session_type == "p":
+            filters["scheduled_at__lt"] = date.today()
         else:
-            workout_schedule = WorkoutSchedule.objects.filter(user = user_data, scheduled_at__gte=date.today()).order_by("-scheduled_at")
+            filters["scheduled_at__gte"] = date.today()
+        workout_schedule = (
+            WorkoutSchedule.objects
+            .filter(**filters)
+            .select_related("gym")
+            .prefetch_related(
+                "workout_type",
+                Prefetch(
+                    "exercises",
+                    queryset=WorkoutExercise.objects.filter(status="A")
+                )
+            )
+            .order_by("-scheduled_at")
+        )
+
         if workout_schedule:
             workout_schedule_data = WorkoutScheduleSerializer(workout_schedule, many=True).data
             success_data =  success_response(message="Success", code="success", data=workout_schedule_data)

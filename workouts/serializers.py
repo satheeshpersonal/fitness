@@ -5,17 +5,24 @@ from accounts.functions import gym_response
 from accounts.serializers import UserDetailsSerializer
 
 class GymAccessLogSerializer(serializers.ModelSerializer):
+    gym = serializers.SerializerMethodField()
+    user_details = UserDetailsSerializer(
+        source="user",
+        read_only=True
+    )
     class Meta:
         model = GymAccessLog
         fields = '__all__'  # include all fields
         read_only_fields = ['gym_access_id', 'access_date']  # only these are read-only
+
+    def get_gym(self, obj):
+        return gym_response(obj.gym)
     
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data['gym'] =  gym_response(instance.gym)
-        data['user_details'] = UserDetailsSerializer(instance.user).data
-        
-        return data
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+    #     data['gym'] =  gym_response(instance.gym)
+    #     data['user_details'] = UserDetailsSerializer(instance.user).data
+    #     return data
     
 
 class WorkoutExerciseSerializer(serializers.ModelSerializer):
@@ -36,25 +43,39 @@ class WorkoutExerciseSerializer(serializers.ModelSerializer):
 
 
 class WorkoutScheduleSerializer(serializers.ModelSerializer):
-    # workout_type = WorkoutTypeSerializer(many=True, read_only=True)
+    workout_type = WorkoutTypeSerializer(many=True, read_only=True)
+    # exercise = serializers.SerializerMethodField()
+    gym = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkoutSchedule
         fields = '__all__'  # include all fields
         read_only_fields = ['created_at', 'updated_at']  # only these are read-only
+    
+    exercise = WorkoutExerciseSerializer(
+        source="exercises",
+        many=True,
+        read_only=True
+    )
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        workout_types = instance.workout_type.all()
-        data['workout_type'] =  WorkoutTypeSerializer(workout_types, many=True).data
+    def get_gym(self, obj):
+        if obj.gym:
+            return gym_response(obj.gym)
 
-        exercise_all = WorkoutExercise.objects.filter(workout_schedule=instance.id, status = 'A').order_by("created_at")
-        data['exercise'] = WorkoutExerciseSerializer(exercise_all, many=True).data
+        return None
 
-        if instance.gym:
-            data['gym'] =  gym_response(instance.gym)
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+    #     workout_types = instance.workout_type.all()
+    #     data['workout_type'] =  WorkoutTypeSerializer(workout_types, many=True).data
 
-        return data
+    #     exercise_all = WorkoutExercise.objects.filter(workout_schedule=instance.id, status = 'A').order_by("created_at")
+    #     data['exercise'] = WorkoutExerciseSerializer(exercise_all, many=True).data
+
+    #     if instance.gym:
+    #         data['gym'] =  gym_response(instance.gym)
+
+    #     return data
     
 
 class SetGoalSerializer(serializers.ModelSerializer):

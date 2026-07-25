@@ -5,7 +5,7 @@ from accounts.functions import gym_response
 from accounts.serializers import UserDetailsSerializer
 
 class GymAccessLogSerializer(serializers.ModelSerializer):
-    gym = serializers.SerializerMethodField()
+    # gym = serializers.SerializerMethodField()
     user_details = UserDetailsSerializer(
         source="user",
         read_only=True
@@ -18,11 +18,11 @@ class GymAccessLogSerializer(serializers.ModelSerializer):
     def get_gym(self, obj):
         return gym_response(obj.gym)
     
-    # def to_representation(self, instance):
-    #     data = super().to_representation(instance)
-    #     data['gym'] =  gym_response(instance.gym)
-    #     data['user_details'] = UserDetailsSerializer(instance.user).data
-    #     return data
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['gym'] =  gym_response(instance.gym)
+        # data['user_details'] = UserDetailsSerializer(instance.user).data
+        return data
     
 
 class WorkoutExerciseSerializer(serializers.ModelSerializer):

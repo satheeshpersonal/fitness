@@ -104,7 +104,7 @@ class CustomUser(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.username
+        return f"{self.username} - {self.first_name} {self.last_name}"
 
 
 class UserOTP(models.Model):  
@@ -231,6 +231,11 @@ class UserSelectLocation(models.Model):
     longitude = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "status", "-created_at"]),
+        ]
 
 
 class Referral(models.Model):

@@ -18,6 +18,7 @@ from subscriptions.functions import get_count_data
 from workouts.functions import get_last_activity
 from django.db.models import Avg, Count, Sum, Q, Prefetch
 from datetime import date
+import math
 import time
 
 # Create your views here.
@@ -295,13 +296,28 @@ class SelectLocationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):        
-        select_location = UserSelectLocation.objects.filter(user = request.user.id).order_by("status", "-created_at")[:3]
+        # select_location = UserSelectLocation.objects.filter(user = request.user.id).order_by("status", "-created_at")[:3]
+        select_location = (
+            UserSelectLocation.objects
+            .filter(user=request.user)
+            .only(
+                "id",
+                "display_name",
+                "address",
+                "city",
+                "latitude",
+                "longitude",
+                "status",
+                "created_at",
+            )
+            .order_by("status", "-created_at")[:3]
+        )
         if select_location:
             select_location_data = UserSelectLocationSerializer(select_location, many=True).data
             success_data =  success_response(message=f"success", code="success", data=select_location_data)
             return Response(success_data, status=200)
         else:
-            error_data =  error_response(message="No location found", code="not_found", data={})
+            error_data =  error_response(message="No location added", code="not_found", data={})
             return Response(error_data, status=200) 
     
     def post(self, request): 
@@ -543,26 +559,55 @@ class GymListView(APIView):
 
         # t = time.time()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
-        gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
-                    .prefetch_related(
-                            Prefetch(
-                                "gymmedia_set",
-                                queryset=GymMedia.objects.order_by("position"),
-                            ),
-                            Prefetch(
-                                "feature",
-                                queryset=GymFeature.objects.filter(status="A").order_by("position"),
-                            ),
-                            "gymreview_set",
-                            "favorited_users",
-                                            )
-                )
-        # print("Query:", time.time() - t)
-        gym_count = gym_list.count()
+        # gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
+        #             .prefetch_related(
+        #                     Prefetch(
+        #                         "gymmedia_set",
+        #                         queryset=GymMedia.objects.order_by("position"),
+        #                     ),
+        #                     Prefetch(
+        #                         "feature",
+        #                         queryset=GymFeature.objects.filter(status="A").order_by("position"),
+        #                     ),
+        #                     "gymreview_set",
+        #                     "favorited_users",
+        #                                     )
+        #         )
+        # # print("Query:", time.time() - t)
+        # gym_count = gym_list.count()
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')
 
         # # city filter 
         # gym_list = gym_list.filter(city__iexact=data["city"])
+
+        # Bounding-box pre-filter at the DB level (cheap), instead of matching
+        # on city name — Nominatim can return "Bangalore", "Bengaluru", or
+        # "Bengaluru Urban" for the same physical location, and our stored
+        # city strings won't reliably match all of them. Distance from the
+        # user's actual coordinates has no such ambiguity.
+        RADIUS_KM = 30
+        lat_delta = RADIUS_KM / 111.0
+        lon_delta = RADIUS_KM / (111.0 * math.cos(math.radians(user_location[0])))
+
+        gym_list = (Gym.objects.filter(
+                ~Q(latitude=None), ~Q(longitude=None), status="A",
+                latitude__range=(user_location[0] - lat_delta, user_location[0] + lat_delta),
+                longitude__range=(user_location[1] - lon_delta, user_location[1] + lon_delta),
+            )
+            .select_related("owner")
+            .prefetch_related(
+                Prefetch(
+                    "gymmedia_set",
+                    queryset=GymMedia.objects.order_by("position"),
+                ),
+                Prefetch(
+                    "feature",
+                    queryset=GymFeature.objects.filter(status="A").order_by("position"),
+                ),
+                "gymreview_set",
+                "favorited_users",
+            )
+        )
         
         # If request asks for favorite gyms only
         if data.get("favorite") == True and user_data !={}:
@@ -585,6 +630,8 @@ class GymListView(APIView):
             gym_with_distance.append(gym)
 
             # print(gym.distance)
+
+        gym_count = len(gym_with_distance)
 
         # Sort by distance
         paginated = sorted_gyms = sorted(gym_with_distance, key=lambda x: x.distance)

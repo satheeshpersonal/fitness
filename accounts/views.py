@@ -666,8 +666,8 @@ class OwnerGymListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        offset = int(self.request.query_params.get('offset', 0))
-        limit = int(self.request.query_params.get('limit', 20))
+        offset = int(self.request.query_params.get('offset', None))
+        limit = int(self.request.query_params.get('limit', None))
         page_type = self.request.query_params.get('page', 'L')
         data = request.data
        
@@ -683,10 +683,12 @@ class OwnerGymListView(APIView):
         if data.get("search_text", None): 
             gym_list = gym_list.filter(name__icontains=data["search_text"])
 
+        paginated = gym_list
         # Pagination
-        offset = int(request.GET.get('offset', 0))
-        limit = int(request.GET.get('limit', 20))
-        paginated = gym_list[offset:offset + limit]
+        if offset and limit:
+            offset = int(request.GET.get('offset', 0))
+            limit = int(request.GET.get('limit', 20))
+            paginated = gym_list[offset:offset + limit]
 
         
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})

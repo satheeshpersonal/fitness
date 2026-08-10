@@ -14,6 +14,7 @@ def create_workout(user, workout_data, gym_access_data):
     from .serializers import WorkoutScheduleSerializer
     from .models import WorkoutSchedule, WorkoutExercise
     print("--- called create_workout function ----")
+    print(gym_access_data)
     if workout_data:
         # WorkoutScheduleSerializer(workout_schedule_data, )
         pass
@@ -27,10 +28,12 @@ def create_workout(user, workout_data, gym_access_data):
             workout_schedule_data.save(update_fields=["gym_id", "gym_access_id"])
             return workout_schedule_data.id
         else:
-            workout_schedule = {"user":user.id, "gym":gym_access_data["gym"]["id"], "gym_access":gym_access_data["id"] }
+            workout_schedule = {"user":user.id, "gym_id":gym_access_data["gym"]["id"], "gym_access":gym_access_data["id"] }
             serializer = WorkoutScheduleSerializer(data = workout_schedule)
             if serializer.is_valid():
                 workout_schedule_data = serializer.save()
+                workout_schedule_data.gym_id = gym_access_data["gym"]["id"]
+                workout_schedule_data.save(update_fields=["gym_id"])
                 # print("workout_schedule_data -", workout_schedule_data.id)
                 return workout_schedule_data.id
             else:

@@ -28,6 +28,8 @@ class CustomUserAdmin(UserAdmin):
         'user_type',
         'status',
         'created_at',
+        'ip_city',
+        'ip_state',
         "get_otp"
     )
     list_editable = ('user_type',)

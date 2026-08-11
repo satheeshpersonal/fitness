@@ -4,18 +4,18 @@ from rest_framework.response import Response
 from rest_framework import status, permissions, authentication
 from FitnessApp.utils.response import success_response, error_response
 from django.utils import timezone
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise, SetGoal
 from .serializers import GymAccessLogSerializer, SetGoalSerializer
 from accounts.models import Gym
-from .functions import create_workout
+from .functions import create_workout, _send_access_notifications
 from subscriptions.models import UserSubscription
 from .serializers import WorkoutScheduleSerializer, WorkoutExerciseSerializer
 import uuid
 from django.db.models import Sum, Prefetch
 from lookups.functions import send_template_email
-from datetime import datetime
 from lookups.firebase_service import send_push_notification
+import threading
 # Create your views here.
 
 
@@ -45,7 +45,7 @@ class GymAccessView(APIView):
 
         
     def post(self, request): #Register User
-        # print(request.data)
+
         request_data = request.data
         user_data = request.user
 
@@ -56,7 +56,6 @@ class GymAccessView(APIView):
         gym_access = GymAccessLog.objects.filter(user = user_data, access_date__date=timezone.now().date()).order_by("-access_date").first()
         if gym_access:
             if gym_access.access_date >= timezone.now()-timedelta(minutes=30): # cehck request lessthen 30mins
-                # print(gym_access.gym.gym_id == uuid.UUID(request_data["gym_id"]))
                 if gym_access.device_id == request_data["device_id"] and gym_access.gym.gym_id  == uuid.UUID(request_data["gym_id"]):  # if user try with same gym with in 30 minutes and same device- we are showing seccess message
                     gym_accessa_data = GymAccessLogSerializer(gym_access).data
                     workout_schedule_id = create_workout(user_data, None, gym_accessa_data)
@@ -67,19 +66,23 @@ class GymAccessView(APIView):
                     error_data =  error_response(message="Your session for today has already been used at the same time from another gym or device. Please contact support for further assistance.", code="not_found", data={})
                     return Response(error_data, status=200)
             elif not request_data.get("second_session", False): #send confirmation popup message if same day second section 
-                error_data =  error_response(message="You’ve already used today’s session. Would you like to take one more?", code="confirmation", data=request_data)
+                error_data =  error_response(message="You've already used today's session. Would you like to take one more?", code="confirmation", data=request_data)
                 return Response(error_data, status=200)
         
         if not gym_access or request_data["second_session"]:
             print(user_data.id)
-            sessions_left_value = UserSubscription.objects.filter(user=user_data, expire_on__gte=timezone.now().date(), is_active=True).first()
+            # select_related("plan") avoids a second query the moment
+            # sessions_left_value.plan.premim_type is accessed below
+            sessions_left_value = UserSubscription.objects.select_related("plan").filter(
+                user=user_data, expire_on__gte=timezone.now().date(), is_active=True
+            ).first()
             if (sessions_left_value and sessions_left_value.sessions_left<=0) or not sessions_left_value: 
-                # print(sessions_left_value["sessions_left"])
                 error_data =  error_response(message="Please enroll class to continue your workout", code="no_session", data={})
                 return Response(error_data, status=200) 
             
-            # print(sessions_left_value.sessions_left)
-            gym_data = Gym.objects.filter(gym_id=request_data["gym_id"], status='A').first()
+            # select_related("owner") avoids a second query later when
+            # gym_data.owner.fire_base_token / .email are accessed
+            gym_data = Gym.objects.select_related("owner").filter(gym_id=request_data["gym_id"], status='A').first()
             if not gym_data:
                 error_data =  error_response(message="Gym is not valid, Please try again sometime", code="not_found", data={})
                 return Response(error_data, status=200)
@@ -95,8 +98,13 @@ class GymAccessView(APIView):
             
             serializer = GymAccessLogSerializer(data=request_data)
             if serializer.is_valid():
-                serializer.save()
+                gym_instance = serializer.save()
+                # We already fetched this exact gym above (with select_related
+                # owner) — assigning it here means the serializer's
+                # to_representation doesn't re-query it from scratch.
+                gym_instance.gym = gym_data
                 gym_log_data = serializer.data
+
                 try:
                     #if create or update WorkoutSchedule while acccess gym
                     workout_schedule_id = create_workout(user_data, None, gym_log_data)
@@ -104,26 +112,14 @@ class GymAccessView(APIView):
                 except Exception as e:
                     print("The create_workout error : ",e)
                 
-                #send email to user
-                try:
-                    access_date = datetime.fromisoformat(gym_log_data["access_date"])
-                    if user_data.email:
-                        emails = {"to_email":[user_data.email]} # to-email and cc-email will add as array
-                        param = {"gym_name": gym_log_data["gym"]["gym_name"], "session_date":access_date.strftime("%d %b %Y %I:%M %p"), "gym_address":f'{gym_log_data["gym"]["address"]}, {gym_log_data["gym"]["city"]}, {gym_log_data["gym"]["state"]}'} #all email parameters
-                        send_template_email("access_session", emails, param)
-                except Exception as e:
-                    print("The payment email error : ",e)
-
-                # Send Notification to gym owner
-                if gym_data.owner.fire_base_token:
-                    send_notification = send_push_notification(gym_data.owner.fire_base_token, user_data.first_name, "New Fitzz Check-In 💪", "member checked in successfully")
-                    print("send_notification - ", send_notification)
-
-                #Send email to gym owner
-                if gym_data.owner.email:
-                    owner_emails = {"to_email":[gym_data.owner.email]}
-                    param["user_name"] = user_data.first_name
-                    send_template_email("access_session_gym_owner", owner_emails, param)
+                # Email + push notification are external network calls — don't
+                # make the person scanning the QR code wait on them. This was
+                # very likely the main source of the 2+ second response time.
+                threading.Thread(
+                    target=_send_access_notifications,
+                    args=(user_data, gym_data, gym_log_data),
+                    daemon=True,
+                ).start()
 
                 success_data =  success_response(message="Successfully accessed", code="success", data=gym_log_data)
                 return Response(success_data, status=200) 
@@ -132,7 +128,7 @@ class GymAccessView(APIView):
                 return Response(error_data, status=200) 
         
         error_data =  error_response(message="No plans available, Please select valid plan", code="not_found", data={})
-        return Response(error_data, status=200) 
+        return Response(error_data, status=200)
 
 
 class GymSessionView(APIView):

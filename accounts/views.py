@@ -660,7 +660,6 @@ class GymListView(APIView):
         return Response(success_data, status=200)
     
 
-
 class OwnerGymListView(APIView):
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [permissions.IsAuthenticated]
@@ -674,16 +673,34 @@ class OwnerGymListView(APIView):
         user_data = request.user
 
         # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
-        gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data)).order_by("-created_at")
-
-        if page_type == 'D':
-            gym_list = gym_list[0:3]
+        # gym_list = Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data)).order_by("-created_at")
+        gym_list = (
+            Gym.objects.filter(Q(owner=user_data) | Q(created_by=user_data))
+            .select_related("owner")
+            .prefetch_related(
+                Prefetch(
+                    "gymmedia_set",
+                    queryset=GymMedia.objects.order_by("position"),
+                ),
+                Prefetch(
+                    "feature",
+                    queryset=GymFeature.objects.filter(status="A").order_by("position"),
+                ),
+                "gymreview_set",
+                "favorited_users",
+            )
+            .order_by("-created_at")
+        )
 
         #if passing premium_type filter - plan
         if data.get("search_text", None): 
             gym_list = gym_list.filter(name__icontains=data["search_text"])
-
+	
         paginated = gym_list
+
+        if page_type == 'D':
+            paginated = gym_list[0:3]
+	    
         # Pagination
         if offset and limit:
             offset = int(request.GET.get('offset', 0))

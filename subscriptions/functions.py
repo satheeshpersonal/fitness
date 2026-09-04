@@ -56,8 +56,11 @@ def get_subscription_data(user_data, plan_data, request_data):
     user_plan_data["discount_amount"] = 0.00
     user_plan_data["coupon_discount_percent"] = 0.00
     user_plan_data["coupon_discount_amount"] = 0.00
-    if plan_data.price_discount >0:
-        user_plan_data["discount_amount"] = Decimal(user_plan_data["total_session_price"]*(plan_data.price_discount/100))
+    if plan_data.price_discount > 0:
+        user_plan_data["discount_percent"] = plan_data.price_discount
+        user_plan_data["discount_amount"] = round(
+            Decimal(user_plan_data["total_session_price"]) * (Decimal(plan_data.price_discount) / 100), 2
+        )
     if request_data.get("coupon_discount_percent", None):
         user_plan_data["coupon"] = request_data.get("coupon", None)
         user_plan_data["coupon_discount_percent"] = Decimal(request_data.get("coupon_discount_percent", 0.00))

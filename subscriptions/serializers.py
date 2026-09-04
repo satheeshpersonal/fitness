@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import UserSubscriptionHistory, SubscriptionPlan, PlanDetails, UserSubscription
 
@@ -46,6 +47,17 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         # data['details'] = PlanDetailsSerializer(instance.plan_details.all(), many=True).data
-        data["price"] = format(instance.price.normalize(), 'f')
+
+        # price        = list / MRP price (struck out on the card when discounted)
+        # final_price  = what the user actually pays per unit (price - price_discount%)
+        # discount_percent is a flat % off, matching get_subscription_data()
+        list_price = instance.price or Decimal("0")
+        discount_percent = instance.price_discount or Decimal("0")
+        final_price = (list_price - (list_price * discount_percent / 100)).quantize(Decimal("0.01"))
+
+        data["price"] = format(list_price.normalize(), 'f')
+        data["final_price"] = format(final_price.normalize(), 'f')
+        data["discount_percent"] = format(discount_percent.normalize(), 'f')
+        data["has_discount"] = discount_percent > 0
 
         return data

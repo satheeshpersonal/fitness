@@ -21,7 +21,7 @@ CURRENCY_CHOICES = [
 
 PREMIUM_TYPE_CHOICES = [
         ('B', 'Basic'),
-        ('V', 'VIP'),
+        # ('V', 'VIP'),
         ('E', 'Elite')
     ]
 
@@ -48,6 +48,7 @@ class SubscriptionPlan(models.Model):
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='INR')
     duration_in_days = models.IntegerField(null=True, blank=True)  # useful for weekly/monthly/yearly plans
     premim_type = models.CharField(max_length=2, choices=PREMIUM_TYPE_CHOICES, default='B')
+    is_popular = models.BooleanField(default=False)  # shows the "POPULAR" badge on the plan card
     position = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=2, choices=STATUS_CHOICES, default='A')
 

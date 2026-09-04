@@ -6,9 +6,10 @@ from FitnessApp.utils.response import success_response, error_response
 from django.utils import timezone
 from datetime import timedelta
 from decouple import config
-from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription, PlanDetails
+from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription, PlanDetails, PREMIUM_TYPE_CHOICES
 from .serializers import SubscriptionHistorySerializer, SubscriptionPlanSerializer
 from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event, redeem_free_session
+from .plan_screen import tier_copy
 from lookups.functions import send_template_email
 from django.db.models import Prefetch
 # from django.views.decorators.csrf import csrf_exempt
@@ -41,6 +42,39 @@ class PlanView(APIView):
 
         plan_all_data = SubscriptionPlanSerializer(plan_all, many=True).data
         success_data =  success_response(message=f"success", code="success", data=plan_all_data)
+        return Response(success_data, status=200)
+
+
+class PlanTiersView(APIView):
+    """
+    Tier tabs for the Plan page (mobile ChoosePlan screen).
+
+    The tab list is derived from the tiers that currently have at least one
+    active plan, in PREMIUM_TYPE_CHOICES order. Per-tier copy (description text,
+    "Available gyms" link) comes from subscriptions/plan_screen.py.
+    """
+
+    def get(self, request):
+        tier_labels = dict(PREMIUM_TYPE_CHOICES)
+        active_codes = set(
+            SubscriptionPlan.objects.filter(status='A').values_list('premim_type', flat=True)
+        )
+        ordered_codes = [code for code, _ in PREMIUM_TYPE_CHOICES if code in active_codes]
+
+        tiers = []
+        for index, code in enumerate(ordered_codes):
+            copy = tier_copy(code)
+            tiers.append({
+                "code": code,
+                "label": tier_labels.get(code, code),
+                "description": copy["description"],
+                "show_gym_link": copy["show_gym_link"],
+                "gym_link_label": copy["gym_link_label"],
+                "gym_link_url": copy["gym_link_url"],
+                "is_default": index == 0,
+            })
+
+        success_data = success_response(message="success", code="success", data=tiers)
         return Response(success_data, status=200)
 
 

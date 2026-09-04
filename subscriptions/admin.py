@@ -14,13 +14,14 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
     # model = Gym
     # Show these columns in the admin list view
     list_display = (
-        'name', 
+        'name',
         'plan_type',
-        'session_count', 
-        'price', 
+        'session_count',
+        'price',
         'currency',
         'duration_in_days',
         'premim_type',
+        'is_popular',
         'position',
         'status'
     )
@@ -28,12 +29,12 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
     inlines = [PlanDetailsInline]  # Add inline here
 
     # Enable filters in the sidebar
-    list_filter = ('name', 'plan_type', 'currency', 'duration_in_days', 'premim_type', 'status')
+    list_filter = ('name', 'plan_type', 'currency', 'duration_in_days', 'premim_type', 'is_popular', 'status')
 
     # Make fields searchable
     search_fields = ('name', 'details', 'plan_type', 'currency', )
 
-    list_editable = ('position', 'status')
+    list_editable = ('is_popular', 'position', 'status')
 
     # Automatically set read-only fields
     # readonly_fields = ('created_at',)
@@ -43,7 +44,7 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
     # Optional: organize fields into sections
     fieldsets = (
         ("", {
-            'fields': ('name', 'details', 'plan_type', 'session_count', 'price', 'currency', 'duration_in_days', 'premim_type', 'position', 'status')
+            'fields': ('name', 'details', 'plan_type', 'session_count', 'price', 'price_discount', 'currency', 'duration_in_days', 'premim_type', 'is_popular', 'position', 'status')
         }),
     )
 

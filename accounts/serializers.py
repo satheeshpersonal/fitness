@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite, Referral
 from lookups.models import GymFeature
 from lookups.serializers import GymFeatureSerializer
+from FitnessApp.utils.media import thumbnail_url, DEFAULT_PROFILE_ICON_URL
 import json
 
 from PIL import Image
@@ -10,33 +11,34 @@ from io import BytesIO
 import sys
 
 class CustomUserSerializer(serializers.ModelSerializer):
-    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
-    profile_icon = serializers.SerializerMethodField()
+    # Was SerializerMethodField, which DRF always treats as read-only — any
+    # profile_icon the app uploaded was silently ignored by is_valid()/save().
+    # ImageField is writable (accepts the uploaded file on PATCH); the actual
+    # URL — real icon or the shared default — is filled in below in
+    # to_representation(), same as before.
+    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'status', 'user_type', 'login_type', 'profile_completed', 'profile_icon', 'address', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'referral_code', 'ip_country', 'ip_state', 'ip_city', 'fire_base_token']
-    
-    def get_profile_icon(self, obj):
-        print("profile_icon -- ", obj.profile_icon)
-        if obj.profile_icon:
-            return obj.profile_icon.url
-        else:
-            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['profile_icon'] = thumbnail_url(instance.profile_icon.url) if instance.profile_icon else thumbnail_url(DEFAULT_PROFILE_ICON_URL)
+        return data
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
-    profile_icon = serializers.SerializerMethodField()
+    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+
     class Meta:
         model = CustomUser
         fields = ['first_name', 'last_name', 'username', 'email', 'mobile_number', 'profile_icon', 'new_to_gym', 'height', 'weight', 'dob', 'gender', 'address', 'country', 'state', 'city', 'profile_completed', 'user_type', 'login_type', 'referral_code', 'email_trigger', 'sms_trigger', 'ip_country', 'ip_state', 'ip_city', 'fire_base_token']
-    
-    def get_profile_icon(self, obj):
-        if obj.profile_icon:
-            return obj.profile_icon.url
-        else:
-            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['profile_icon'] = thumbnail_url(instance.profile_icon.url) if instance.profile_icon else thumbnail_url(DEFAULT_PROFILE_ICON_URL)
+        return data
 
 
 class UserSelectLocationSerializer(serializers.ModelSerializer):
@@ -58,8 +60,16 @@ class GymEquipmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = GymEquipment
         fields = ['id', 'category', 'description', 'icon', 'position', 'status']
-    
+
     icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+
+    def to_representation(self, instance):
+        # Equipment icons render at 64x64px on the gym-detail page's
+        # EquipmentCard — thumbnail instead of serving the full-res original.
+        data = super().to_representation(instance)
+        if data.get('icon'):
+            data['icon'] = thumbnail_url(data['icon'], width=128, height=128)
+        return data
 
 class GymTimingSerializer(serializers.ModelSerializer):
     day_dispaly = serializers.SerializerMethodField()
@@ -538,6 +548,18 @@ class GymListSerializer(serializers.ModelSerializer):
             return obj.favorited_users.filter(user=user).exists()
         return any(f.user_id == user.id for f in favorites)
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # The list card's photo carousel is ~144px tall — GymMediaSerializer
+        # (shared with the much larger gym-detail hero gallery) otherwise
+        # returns the full-resolution original for every photo of every gym
+        # on the page. Thumbnail just here so the detail page keeps its
+        # higher-resolution images.
+        for media_item in data.get("media") or []:
+            if media_item.get("media"):
+                media_item["media"] = thumbnail_url(media_item["media"], width=600, height=400)
+        return data
+
 
 class GymNameListSerializer(serializers.ModelSerializer):
 
@@ -547,18 +569,16 @@ class GymNameListSerializer(serializers.ModelSerializer):
   
 
 class UserDetailsSerializer(serializers.ModelSerializer):
-    # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
-    profile_icon = serializers.SerializerMethodField()
+    profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name', 'last_name', 'mobile_number', 'profile_icon', 'email']
 
-    def get_profile_icon(self, obj):
-        if obj.profile_icon:
-            return obj.profile_icon.url
-        else:
-            return "https://res.cloudinary.com/dzxtx8e4q/image/upload/v1774515327/profile_icon_zgwn3s.png"
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['profile_icon'] = thumbnail_url(instance.profile_icon.url) if instance.profile_icon else thumbnail_url(DEFAULT_PROFILE_ICON_URL)
+        return data
 
 
 class GymReviewSerializer(serializers.ModelSerializer):

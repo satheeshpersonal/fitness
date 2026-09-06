@@ -6,7 +6,7 @@ from .models import CustomUser, UserOTP, UserSelectLocation, Gym, GymFavorite, G
 from .serializers import CustomUserSerializer, UserProfileSerializer, UserSelectLocationSerializer, GymDetailsSerializer, GymListSerializer, GymReviewSerializer, GymFavoriteSerializer, ReferralSerializer, GymCreateSerializer, GymOptionsSerializer, GymNameListSerializer
 from subscriptions.serializers import UserSubscriptionSerializer
 from subscriptions.models import UserSubscription
-from workouts.models import GymAccessLog
+from workouts.models import GymAccessLog, SetGoal
 from django.shortcuts import get_object_or_404
 from .functions import generte_top, send_otp, gym_response, referral_data_update, validate_email, verify_msg91_token
 from django.utils import timezone
@@ -20,6 +20,9 @@ from django.db.models import Avg, Count, Sum, Q, Prefetch
 from datetime import date
 import math
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 
@@ -27,12 +30,24 @@ import time
 class CustomUserView(APIView):
     """
     Handles both POST (create) and PATCH (partial update) for CustomUser
+
+    GET/PATCH act on the caller's own profile and must be authenticated; POST
+    is registration and has to stay open (there's no token yet). The
+    authentication_classes/permission_classes lines that used to live inside
+    get()/patch() were local variables, not the class attributes DRF actually
+    reads — they did nothing, and the view was silently running under the
+    global default (AllowAny), i.e. GET/PATCH had no enforced auth at all.
+    get_permissions() below is the standard way to vary permissions by method
+    on the same view.
     """
+    authentication_classes = [authentication.TokenAuthentication]
+
+    def get_permissions(self):
+        if self.request.method in ("GET", "PATCH"):
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
 
     def get(self, request):
-        authentication_classes = [authentication.TokenAuthentication]
-        permission_classes = [permissions.IsAuthenticated]
-        
         user_data = UserProfileSerializer(request.user).data
         user_data["full_name"] = user_data["first_name"]+" "+user_data["last_name"]
         
@@ -53,7 +68,6 @@ class CustomUserView(APIView):
         message = ""
         
         if not mobile_number and not email:
-            print("value missing")
             error_data =  error_response(message="User name is required to create user", code="user_name", data={})
             return Response(error_data, status=200)
         
@@ -69,7 +83,6 @@ class CustomUserView(APIView):
 
             email = valid_email
             data["username"] = email 
-            print("valid_email - ", email)
             data["login_type"] = "E" 
             message = "OTP triggered to your register email"
 
@@ -104,9 +117,6 @@ class CustomUserView(APIView):
         # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request):
-        authentication_classes = [authentication.TokenAuthentication]
-        permission_classes = [permissions.IsAuthenticated]
-
         user_input_data = request.data
         if hasattr(user_input_data, "_mutable") and not user_input_data._mutable and not request.FILES:
             user_input_data._mutable = True
@@ -120,14 +130,12 @@ class CustomUserView(APIView):
         full_name = user_input_data.pop("full_name", None)
         # Split full name
         if full_name:
-            print(full_name)
             name_parts = full_name[0].split()
             user_input_data["first_name"] = name_parts[0]
             user_input_data["last_name"] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
             user_input_data["profile_completed"] = True
 
         user_data = request.user
-        print(user_data)
         serializer = UserProfileSerializer(user_data, data=user_input_data, partial=True)
         if serializer.is_valid():
             instance = serializer.save()
@@ -152,13 +160,12 @@ class ResendOTPView(APIView):
         login_type = data.get("login_type", None)
 
         if not user_name:
-            print("value missing")
             error_data =  error_response(message="User name is required to send OTP", code="user_name", data={})
             return Response(error_data, status=200)
         
         user_data = CustomUser.objects.filter(Q(mobile_number = user_name) | Q(email__iexact = user_name)).first()
         if not user_data:
-            error_data =  error_response(message="User account not exist", code="not_found", data={})
+            error_data =  error_response(message="User account does not exist", code="not_found", data={})
             return Response(error_data, status=200) 
         elif user_data and user_data.status in ["I", "D"]:
             error_data =  error_response(message="Please contact admin", code="login_error", data={})
@@ -186,9 +193,9 @@ class verifyOTPView(APIView):
         msg_token_valid = False
 
         if not username and (not otp_code or not msg_token):
-            error_data =  error_response(message="User name and OTP required for verfiy account", code="missing_value", data={})
+            error_data =  error_response(message="User name and OTP required to verify account", code="missing_value", data={})
             return Response(error_data, status=200) 
-            # return Response({"error": "User name and OTP required for verfiy account"}, status=status.HTTP_400_BAD_REQUEST) 
+            # return Response({"error": "User name and OTP required to verify account"}, status=status.HTTP_400_BAD_REQUEST) 
         
         #check user alredy exist
         user_data = CustomUser.objects.filter(Q(mobile_number = username) | Q(email__iexact = username)).first()
@@ -201,19 +208,15 @@ class verifyOTPView(APIView):
                     if referred_by:
                         referral_data_update({"referrer":referred_by.id, "referred_user":user_data.id, "referral_code":referral_code, "email":user_data.email})
             else:
-                print(data)
-                print("serializer - ", serializer.errors)
                 error_data =  error_response(message=serializer.errors, code="error", data={})
                 return Response(error_data, status=200)
-            # error_data =  error_response(message="User account not exist", code="not_found", data={})
+            # error_data =  error_response(message="User account does not exist", code="not_found", data={})
             # return Response(error_data, status=200) 
         elif user_data and user_data.status in ["I", "D"]:
             error_data =  error_response(message="Please contact admin", code="login_error", data={})
             return Response(error_data, status=200)
         if user_data:
-            print("user_data")
             if data["login_type"] == "M":
-                print("login_type")
                 msg_verify_data = verify_msg91_token(msg_token)
                 if msg_verify_data["code"] == 200:
                     msg_token_valid = True
@@ -231,7 +234,6 @@ class verifyOTPView(APIView):
                         send_template_email("Welcome", emails, param)
 
                 user_details = CustomUserSerializer(user_data).data
-                print("user_details - ", user_details)
                 # if user_data.profile_completed: #check Profile status
                 # Delete old token if exists
                 Token.objects.filter(user=user_data).delete()
@@ -248,15 +250,13 @@ class verifyOTPView(APIView):
                     if referred_count >= 2: #first 2 referral for free session
                         referral_data["reward_points"] = 50
 
-                    print("referral_data", referral_data)
                     serializer = ReferralSerializer(referred_user, data=referral_data, partial=True)
                     if serializer.is_valid():
-                        instance = serializer.save()
-                        print(instance.user_status)
+                        serializer.save()
                     else:
-                        print("Error in referral update flow - ", serializer.errors)
+                        logger.error("Referral update failed on OTP verify: %s", serializer.errors)
 
-                # cancel delete request login in between - if any 
+                # cancel delete request login in between - if any
                 cancel_delete_request = AccountDeleteRequest.objects.filter(user = user_data, status = 'A').update(status='C')
 
                 # update fire base token if comes
@@ -267,13 +267,13 @@ class verifyOTPView(APIView):
                 return Response(success_data, status=200) 
                 # return Response(user_details.datas, status=status.HTTP_201_CREATED)
             else:
-                error_data =  error_response(message="Please enter vealid OTP", code="invalid", data={})
+                error_data =  error_response(message="Please enter a valid OTP", code="invalid", data={})
                 return Response(error_data, status=200) 
-                # return Response("Please enter vealid OTP", status=status.HTTP_201_CREATED)
+                # return Response("Please enter a valid OTP", status=status.HTTP_201_CREATED)
         else:
-            error_data =  error_response(message="User account not exist", code="not_found", data={})
+            error_data =  error_response(message="User account does not exist", code="not_found", data={})
             return Response(error_data, status=200) 
-            # return Response({"error": "User account not exist"}, status=status.HTTP_400_BAD_REQUEST) 
+            # return Response({"error": "User account does not exist"}, status=status.HTTP_400_BAD_REQUEST) 
 
 
 class DeleteAccountView(APIView):
@@ -302,6 +302,8 @@ class SelectLocationView(APIView):
             .filter(user=request.user)
             .only(
                 "id",
+                "user",  # serializer emits the FK — without this each row
+                         # triggered a deferred load (3 extra queries)
                 "display_name",
                 "address",
                 "city",
@@ -325,14 +327,18 @@ class SelectLocationView(APIView):
         data["user"] = request.user.id
         
         if data.get("id", None) :
-            select_location = select_location = UserSelectLocation.objects.filter(id = data["id"]).first()
+            # Was missing user=request.user — any authenticated user could
+            # pass another user's saved-location id here and flip it active.
+            select_location = UserSelectLocation.objects.filter(id=data["id"], user=request.user).first()
+            if not select_location:
+                error_data =  error_response(message="No location found", code="not_found", data={})
+                return Response(error_data, status=200)
             serializer = UserSelectLocationSerializer(select_location, data={"status":"A"}, partial=True)
         else:
             serializer = UserSelectLocationSerializer(data = data)
         
         if serializer.is_valid():
             instance = serializer.save()
-            print("instance -- ", instance)
         else:
             error_data =  error_response(message=serializer.errors, code="error", data={})
             return Response(error_data, status=200)
@@ -342,13 +348,18 @@ class SelectLocationView(APIView):
         return Response(success_data, status=200)
     
 
-    def delete(self, request, id): 
+    def delete(self, request, id):
         select_location = UserSelectLocation.objects.filter(id=id, user = request.user).first()
         if select_location:
             if select_location.status == 'A':
+                # Deleting your only (and therefore active) saved location left
+                # active_location as None here, and .save() on that crashed
+                # the request — deleting the last one now just leaves nothing
+                # active instead of erroring.
                 active_location = UserSelectLocation.objects.filter(~Q(id=select_location.id), user = request.user).order_by("-created_at").first()
-                active_location.status = 'A'
-                active_location.save()
+                if active_location:
+                    active_location.status = 'A'
+                    active_location.save()
             select_location.delete()
             success_data =  success_response(message=f"success", code="success", data={})
             return Response(success_data, status=200)
@@ -359,15 +370,15 @@ class SelectLocationView(APIView):
 
 class GymView(APIView):
     authentication_classes = [authentication.TokenAuthentication]
-    # permission_classes = [permissions.IsAuthenticated]
+    # No permission_classes — relies on the global AllowAny default so an
+    # anonymous visitor can view an active gym's detail page; the query
+    # below still restricts anonymous/regular users to status="A" gyms,
+    # only owners/staff (E/A/G) can see their own gym regardless of status.
 
     def get(self, request, gym_id):
-        # if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"): #if Executive or Admin
-        #     gym_data = Gym.objects.filter(Q(owner=request.user) | Q(created_by=request.user), gym_id=gym_id).first()
-        # else:
-        #     gym_data = Gym.objects.filter(gym_id=gym_id, status='A').first()
-        # t = time.time()
-        # total = time.time()
+        # Single-object detail fetch with select_related/prefetch_related
+        # already covering every nested relation the serializer touches —
+        # this is not an N+1 hotspot the way the list/search views were.
         gym_queryset = Gym.objects.select_related("owner").prefetch_related(
             Prefetch(
                 "gymmedia_set",
@@ -386,8 +397,6 @@ class GymView(APIView):
                 queryset=GymTiming.objects.filter(status="A").order_by("position")
             ),
         )
-        # print("Queryset Build:", time.time() - t)
-        # t = time.time()
         if request.user.is_authenticated and request.user.user_type in ("E", "A", "G"):
             gym_data = gym_queryset.filter(
                 Q(owner=request.user) | Q(created_by=request.user),
@@ -398,25 +407,16 @@ class GymView(APIView):
                 gym_id=gym_id,
                 status="A",
             ).first()
-        # print("Fetch Gym:", time.time() - t)
-        # t = time.time()
         if not gym_data:
             error_data =  error_response(message="Gym data not found", code="not_found", data={})
             return Response(error_data, status=200)
-        
+
         serializerdata = GymDetailsSerializer(gym_data)
-        # print("Serializer:", time.time() - t)
-        # t = time.time()
         data = serializerdata.data
-        # print("serializer.data:", time.time() - t)
-        # t = time.time()
         data["favorite"] = False
         if request.user.is_authenticated and GymFavorite.objects.filter(user=request.user, gym_id = data["id"] ).exists():
             data["favorite"] = True
         success_data =  success_response(message=f"success", code="success", data=data)
-        # print("Favorite:", time.time() - t)
-
-        # print("TOTAL:", time.time() - total)
         return Response(success_data, status=200)
 
 
@@ -456,14 +456,13 @@ class GymCreateView(APIView):
             gym_user_data = CustomUser.objects.filter((Q(mobile_number = mobile_number) & Q(mobile_number__isnull=False) & ~Q(mobile_number='')) | (Q(email__iexact = email) & Q(email__isnull=False) & ~Q(email='')), user_type="G").first()
             
             if gym_user_data:
-                print("get user", email, mobile_number, gym_user_data)
                 owner_data = gym_user_data
                 serializer = CustomUserSerializer(gym_user_data, data=data, partial=True)
                 if serializer.is_valid():
                     owner_data = serializer.save()
-                    print(owner_data)
                 else:
-                    print(serializer.errors)
+                    error_data = error_response(message=serializer.errors, code="error", data={})
+                    return Response(error_data, status=200)
             elif not gym_id:
                 if not gym_input_data.get("owner_email") and not gym_input_data.get("owner_mobile_number"):
                     error_data =  error_response(message="Owner is required to create gym", code="user_not_found", data={})
@@ -482,7 +481,6 @@ class GymCreateView(APIView):
                 if serializer.is_valid():
                     owner_data = serializer.save()
                 else:
-                    print(serializer.errors)
                     error_data =  error_response(message=serializer.errors, code="error", data={})
                     return Response(error_data, status=200)
                 
@@ -507,18 +505,16 @@ class GymCreateView(APIView):
             
             try:
                 # owner_data = request.user
-                print("instance -- ", owner_data.email)
                 if not gym_id: #send email only create time
                     emails = {"to_email":[owner_data.email]} # to-email and cc-email will add as array
                     param = {"gym_name": gym_data["name"], "city":gym_data["city"], "owner_name":owner_data.first_name+" "+owner_data.last_name, "mobile":owner_data.mobile_number} #all email parameters
                     send_template_email("register_gym", emails, param)
             except Exception as e:
-                print("send email for register gym: ",e)
+                logger.exception("send email for register gym failed")
 
             success_data =  success_response(message=f"success", code="success", data=gym_data)   
             return Response(success_data, status=200)
         else:
-            print(serializer.errors)
             error_data =  error_response(message=serializer.errors, code="error", data={})
             return Response(error_data, status=200)
 
@@ -529,56 +525,24 @@ class GymListView(APIView):
     # permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # total = time.time()
-        print("===== API START =====")
-
         offset = self.request.query_params.get('offset', None)
         limit = self.request.query_params.get('limit', None)
         data = request.data
-        
+
         user_data = {}
         if request.user.is_authenticated:
             user_data = request.user
-        
-        # print("user_data", user_data)
-        # if request.user.is_authenticated:
-        #     #get user's current active location
-        #     select_location = UserSelectLocation.objects.filter(user = request.user.id, status='A').first()
-        #     if not select_location:
-        #         error_data =  error_response(message="Please select location", code="not_found", data={})
-        #         return Response(error_data, status=200)
-            
-        #     user_location = (float(select_location.latitude), float(select_location.longitude))
 
-        #     gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=select_location.city)
-        # else:    
-        if not data["latitude"] and data["longitude"]:
-            error_data =  error_response(message="Please select location", code="not_found", data={})
+        # Was `not data["latitude"] and data["longitude"]` — by precedence
+        # that's `(not lat) and lng`, so a request with BOTH coords missing
+        # slipped through to float(None) and 500'd.
+        lat_raw = data.get("latitude")
+        lon_raw = data.get("longitude")
+        try:
+            user_location = (float(lat_raw), float(lon_raw))
+        except (TypeError, ValueError):
+            error_data = error_response(message="Please select a location", code="not_found", data={})
             return Response(error_data, status=200)
-        user_location = (float(data["latitude"]), float(data["longitude"]))
-
-        # t = time.time()
-        # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A', city__iexact=data["city"])
-        # gym_list = (Gym.objects.filter(~Q(latitude=None),~Q(longitude=None),status="A",city__iexact=data["city"]).select_related("owner")
-        #             .prefetch_related(
-        #                     Prefetch(
-        #                         "gymmedia_set",
-        #                         queryset=GymMedia.objects.order_by("position"),
-        #                     ),
-        #                     Prefetch(
-        #                         "feature",
-        #                         queryset=GymFeature.objects.filter(status="A").order_by("position"),
-        #                     ),
-        #                     "gymreview_set",
-        #                     "favorited_users",
-        #                                     )
-        #         )
-        # # print("Query:", time.time() - t)
-        # gym_count = gym_list.count()
-        # gym_list = Gym.objects.filter(~Q(latitude=None), ~Q(longitude=None), status='A')
-
-        # # city filter 
-        # gym_list = gym_list.filter(city__iexact=data["city"])
 
         # Bounding-box pre-filter at the DB level (cheap), instead of matching
         # on city name — Nominatim can return "Bangalore", "Bengaluru", or
@@ -589,11 +553,48 @@ class GymListView(APIView):
         lat_delta = RADIUS_KM / 111.0
         lon_delta = RADIUS_KM / (111.0 * math.cos(math.radians(user_location[0])))
 
-        gym_list = (Gym.objects.filter(
-                ~Q(latitude=None), ~Q(longitude=None), status="A",
-                latitude__range=(user_location[0] - lat_delta, user_location[0] + lat_delta),
-                longitude__range=(user_location[1] - lon_delta, user_location[1] + lon_delta),
-            )
+        candidates = Gym.objects.filter(
+            ~Q(latitude=None), ~Q(longitude=None), status="A",
+            latitude__range=(user_location[0] - lat_delta, user_location[0] + lat_delta),
+            longitude__range=(user_location[1] - lon_delta, user_location[1] + lon_delta),
+        )
+
+        # If request asks for favorite gyms only
+        if data.get("favorite") == True and user_data !={}:
+            candidates = candidates.filter(favorited_users__user=user_data)
+
+        #if passing premium_type filter - plan
+        if data.get("type", None):
+            candidates = candidates.filter(premium_type=data["type"])
+
+        #if search gym name based
+        if data.get("search_text", None):
+            candidates = candidates.filter(name__icontains=data["search_text"])
+
+        # Sort/paginate against a lightweight (id, lat, lon) projection first,
+        # instead of the fully joined queryset. Previously every page request
+        # ran select_related/prefetch_related (owner, every media item, every
+        # feature, every review, every favorite) for EVERY gym in the 30km
+        # box just to compute a distance and sort, then discarded all but one
+        # page's worth — so the cost scaled with gyms-in-range, not with the
+        # page size, and repeated in full on every single scroll/page. Now
+        # the expensive joins only run on the up-to-`limit` gyms actually
+        # returned.
+        distance_by_id = {
+            gym_id: round(geodesic(user_location, (lat, lon)).km, 2)
+            for gym_id, lat, lon in candidates.values_list("id", "latitude", "longitude")
+        }
+        gym_count = len(distance_by_id)
+        ordered_ids = sorted(distance_by_id, key=lambda gid: distance_by_id[gid])
+
+        page_ids = ordered_ids
+        if offset and limit:
+            offset = int(offset)
+            limit = int(limit)
+            page_ids = ordered_ids[offset:offset + limit]
+
+        gym_list = (
+            Gym.objects.filter(id__in=page_ids)
             .select_related("owner")
             .prefetch_related(
                 Prefetch(
@@ -608,55 +609,19 @@ class GymListView(APIView):
                 "favorited_users",
             )
         )
-        
-        # If request asks for favorite gyms only
-        if data.get("favorite") == True and user_data !={}:
-            gym_list = gym_list.filter(favorited_users__user=user_data)
-        
-        #if passing premium_type filter - plan
-        if data.get("type", None):
-            gym_list = gym_list.filter(premium_type=data["type"])
+        gyms_by_id = {gym.id: gym for gym in gym_list}
 
-        #if search gym name based
-        if data.get("search_text", None):
-            gym_list = gym_list.filter(name__icontains=data["search_text"])
+        paginated = []
+        for gid in page_ids:
+            gym = gyms_by_id.get(gid)
+            if gym:
+                gym.distance = distance_by_id[gid]
+                paginated.append(gym)
 
-        gym_with_distance = []
-
-        for gym in gym_list:
-            gym_location = (float(gym.latitude), float(gym.longitude))
-            distance_km = geodesic(user_location, gym_location).km
-            gym.distance = round(distance_km, 2)
-            gym_with_distance.append(gym)
-
-            # print(gym.distance)
-
-        gym_count = len(gym_with_distance)
-
-        # Sort by distance
-        paginated = sorted_gyms = sorted(gym_with_distance, key=lambda x: x.distance)
-
-        # print(sorted_gyms)
-
-        # Pagination
-        if offset and limit:
-            offset = int(offset)
-            limit = int(limit)
-            paginated = sorted_gyms[offset:offset + limit]
-
-        # t = time.time()
         serializer = GymListSerializer(paginated, many=True, context={"user": user_data})
-        # print("Serializer:", time.time() - t)
-        # print(serializer.data)
-
-        # t = time.time()
         serialized_data = serializer.data
-        # print("serializer.data:", time.time() - t)
-        
-        # t = time.time()
+
         success_data =  success_response(message=f"success", code="success", data=serialized_data, extra_data={"total_gym": gym_count})
-        # print("Response Build:", time.time() - t)
-        # print("TOTAL:", time.time() - total)
         return Response(success_data, status=200)
     
 
@@ -743,14 +708,28 @@ class DashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        subscription_data = {}
         subscription_data = get_count_data(request.user.id)
-        print("subscription_data - ",subscription_data)
 
         subscription_data["activity_count"] = subscription_data.pop("session_count", 0)
         subscription_data["expires_days"] = max((subscription_data.get("expire_on", date.today()) - date.today()).days, 0)
 
         subscription_data["last_activity"] = get_last_activity(request.user.id)
+
+        # Lets the dashboard show the user's existing goal (type/level/days)
+        # instead of always prompting "Set your weekly fit goal" even after
+        # they've already set one.
+        goal_data = SetGoal.objects.filter(user=request.user).only(
+            "id", "goal_type", "level", "workout_days"
+        ).first()
+        subscription_data["current_goal"] = None
+        if goal_data:
+            subscription_data["current_goal"] = {
+                "id": goal_data.id,
+                "goal_type": goal_data.goal_type,
+                "goal_type_label": goal_data.get_goal_type_display(),
+                "level": goal_data.level,
+                "workout_days": goal_data.workout_days,
+            }
 
         success_data =  success_response(message=f"success", code="success", data=subscription_data)
         return Response(success_data, status=200)
@@ -836,16 +815,33 @@ class GymDashboardView(APIView):
 
 
 class ReviewView(APIView):
-    
-    def get(self, request):  
+    authentication_classes = [authentication.TokenAuthentication]
+
+    def get_permissions(self):
+        # `authentication_classes` above is a real class attribute, so
+        # TokenAuthentication always runs and populates request.user when a
+        # token is sent — but reading reviews (GET) should stay open to
+        # anonymous visitors (this is what the public gym-detail page calls),
+        # while adding/editing/deleting one requires a logged-in user.
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get(self, request):
         gym_id = request.query_params.get('gym_id', None) 
         page_type = request.query_params.get('page_type', None)  # g - gym details page , 
         gym_data = {}
 
         if page_type == 'g':
-            review_data = GymReview.objects.filter(gym__gym_id = gym_id, status='A').order_by("-created_at")[:1]
+            # Only 1 row is ever returned here, so no N+1 risk either way,
+            # but select_related keeps it consistent with the branch below.
+            review_data = GymReview.objects.filter(gym__gym_id = gym_id, status='A').select_related('user').order_by("-created_at")[:1]
         else:
-            review_data = GymReview.objects.filter(gym__gym_id = gym_id, status='A').select_related('gym').order_by("-created_at")
+            # GymReviewSerializer.to_representation() accesses instance.user
+            # for every row — without select_related('user') the full
+            # reviews-list page (unlike the gym-detail page's single-row
+            # fetch above) ran one extra query per review.
+            review_data = GymReview.objects.filter(gym__gym_id = gym_id, status='A').select_related('gym', 'user').order_by("-created_at")
         if review_data:
             serializer = GymReviewSerializer(review_data, many=True).data
             total_average = GymReview.objects.filter(gym__gym_id=gym_id, status='A').aggregate(
@@ -858,9 +854,12 @@ class ReviewView(APIView):
                 # gym_data["name"] = review_data[0].gym.name
                 # gym_data["city"] = review_data[0].gym.city
                 # gym_data["state"] = review_data[0].gym.state
+                # gym_response() already resolves profile_icon (real icon,
+                # thumbnailed, or the shared default) — this used to
+                # overwrite it with the raw full-resolution URL whenever the
+                # gym had an icon, undoing the thumbnail sizing for this
+                # screen's gym summary.
                 gym_data = gym_response(review_data[0].gym)
-                if review_data[0].gym.profile_icon:
-                    gym_data["profile_icon"] = review_data[0].gym.profile_icon.url
 
             extra_data = total_average
             extra_data["gym"] = gym_data
@@ -871,10 +870,7 @@ class ReviewView(APIView):
             return Response(error_data, status=200) 
         
     
-    def post(self, request): 
-        authentication_classes = [authentication.TokenAuthentication]
-        permission_classes = [permissions.IsAuthenticated]
-
+    def post(self, request):
         data = request.data
         data["user"] = request.user.id
         review_id = data.get("review_id", None)
@@ -904,10 +900,7 @@ class ReviewView(APIView):
             return Response(error_data, status=200)
     
 
-    def delete(self, request, id): 
-        authentication_classes = [authentication.TokenAuthentication]
-        permission_classes = [permissions.IsAuthenticated]
-
+    def delete(self, request, id):
         review_data = GymReview.objects.filter(id= id, user = request.user).first()
         if review_data:
             review_data.delete()
@@ -916,10 +909,13 @@ class ReviewView(APIView):
         else:
             error_data =  error_response(message="No review found", code="not_found", data={})
             return Response(error_data, status=200)
-        
+
 
 class ReviewDetailtView(APIView):
-    def get(self, request, id):  
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, id):
         review_data = GymReview.objects.filter(id= id, user = request.user).first()
         if review_data:
             serializer = GymReviewSerializer(review_data).data
@@ -955,7 +951,7 @@ class FavoritesGymView(APIView):
                     success_data =  success_response(message=f"Removed successfully", code="success", data={})
                 return Response(success_data, status=200)
         except Exception as e:
-            print("FavoritesGymView: ",e)
+            logger.exception("FavoritesGymView error")
             error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
             return Response(error_data, status=200) 
 
@@ -970,22 +966,40 @@ class ReferralView(APIView):
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
-        extra_data = {"total_referrals": 0, "total_reward_points": 0}
-        try:  
+        extra_data = {"total_referrals": 0, "total_reward_points": 0, "fitpoints_balance": 0}
+        try:
             user_data = request.user
-            referral_data = Referral.objects.filter(referrer = user_data)
-            if referral_data:
-                aggregates = referral_data.aggregate(
-                    total_referrals=Count('id'),
-                    total_reward_points=Sum('reward_points')
-                )
-
-                extra_data = {"total_referrals": aggregates["total_referrals"], "total_reward_points": aggregates["total_reward_points"] or 0}
+            from subscriptions.functions import get_fitpoints_balance
+            # ReferralSerializer.get_user_data() reads obj.referred_user for
+            # every row — without select_related that was an extra query
+            # per referral, i.e. this page got slower the more friends a
+            # user referred. Also ordered newest-first to match "Referral
+            # History" (it had no ordering before, so rows came back in
+            # whatever order the DB happened to return them).
+            referral_data = list(
+                Referral.objects.select_related("referred_user")
+                .filter(referrer=user_data)
+                .order_by("-created_at")
+            )
+            # Single query: total count, lifetime points, and confirmed-only
+            # points (which is the spendable FitPoints "earned" figure).
+            aggregates = Referral.objects.filter(referrer=user_data).aggregate(
+                total_referrals=Count("id"),
+                total_reward_points=Sum("reward_points"),
+                confirmed_points=Sum("reward_points", filter=Q(user_status="C")),
+            )
+            extra_data = {
+                "total_referrals": aggregates["total_referrals"] or 0,
+                "total_reward_points": aggregates["total_reward_points"] or 0,
+                "fitpoints_balance": get_fitpoints_balance(
+                    user_data, earned=aggregates["confirmed_points"]
+                ),
+            }
             serializer_data = ReferralSerializer(referral_data, many=True).data
             success_data =  success_response(message=f"success", code="success", data=serializer_data, extra_data = extra_data)
             return Response(success_data, status=200)
         except Exception as e:
-            print("Referral error: ",e)
+            logger.exception("Referral count error")
             error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
             return Response(error_data, status=200)
 
@@ -994,24 +1008,30 @@ class ReferralCountView(APIView):
     authentication_classes = [authentication.TokenAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
-        try:  
+        try:
             user_data = request.user
-            referral_data = Referral.objects.filter(referrer = user_data, user_status="C")
-            total_count = referral_data.count()
+            # One aggregate for both the confirmed-referral count and the
+            # total reward points (which is also the FitPoints "earned"
+            # figure) instead of a .count() plus a separate Sum().
+            agg = Referral.objects.filter(referrer=user_data, user_status="C").aggregate(
+                total=Count("id"), points=Sum("reward_points")
+            )
+            total_count = agg["total"] or 0
 
             free_session_request = FreeSessionRequest.objects.filter(user = user_data).order_by("-created_at").first()
 
-            # total_reward_points = referral_data.aggregate(total_points=Sum('reward_points'))['total_points'] or 0
-            data = {"total_count":total_count
-                    # , "total_points":total_reward_points
-                    }
+            from subscriptions.functions import get_fitpoints_balance
+            data = {
+                "total_count": total_count,
+                "fitpoints_balance": get_fitpoints_balance(user_data, earned=(agg["points"] or 0)),
+            }
             if free_session_request:
                 data["free_session_request"] = free_session_request.status
 
             success_data =  success_response(message=f"success", code="success", data=data)
             return Response(success_data, status=200)
         except Exception as e:
-            print("Referral error: ",e)
+            logger.exception("Referral view error")
             error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
             return Response(error_data, status=200)
     
@@ -1022,7 +1042,14 @@ class FreeSessionRequestView(APIView):
         try:  
             user_data = request.user
             referral_count = Referral.objects.filter(referrer = user_data, user_status='C').count()
-            request_count = FreeSessionRequest.objects.filter(user=user_data, status='A').count()
+            # Only checking status='A' (Approved) let the frontend's own
+            # "Waiting for Approval" button-disable be the only thing
+            # stopping a second submission — a user could otherwise resend
+            # this request repeatedly while an earlier one was still
+            # Pending (e.g. a second tap before the UI re-fetches). Blocking
+            # on Pending too still allows a fresh request after a Rejected
+            # one, matching the frontend's own gating.
+            request_count = FreeSessionRequest.objects.filter(user=user_data, status__in=['P', 'A']).count()
             if request_count <=0 and referral_count >=2:
                 FreeSessionRequest.objects.create(user=user_data)
                 success_data =  success_response(message=f"success", code="success", data={})
@@ -1031,7 +1058,7 @@ class FreeSessionRequestView(APIView):
                 error_data =  error_response(message="Error in referral flow, Please contact admin", code="error", data={})
                 return Response(error_data, status=200)
         except Exception as e:
-            print("Referral error: ",e)
+            logger.exception("FreeSessionRequest error")
             error_data =  error_response(message="Something went wrong. Please try again.", code="error", data={})
             return Response(error_data, status=200)
     

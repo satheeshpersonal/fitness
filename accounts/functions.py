@@ -7,6 +7,7 @@ from .serializers import ReferralSerializer
 from .models import Referral
 import requests
 from decouple import config
+from FitnessApp.utils.media import thumbnail_url, DEFAULT_GYM_ICON_URL
 
 def generte_top(user, login_type=None):
     data = {}
@@ -37,10 +38,11 @@ def gym_response(gym):
     data['latitude'] = gym.latitude
     data['longitude'] = gym.longitude
 
-    data['profile_icon'] = None
-    if gym.profile_icon:
-        data['profile_icon'] = gym.profile_icon.url
-    
+    # A gym with no uploaded icon previously sent profile_icon: None, leaving
+    # the app to render a broken image — fall back to a shared default icon,
+    # sized down the same as a real one.
+    data['profile_icon'] = thumbnail_url(gym.profile_icon.url) if gym.profile_icon else thumbnail_url(DEFAULT_GYM_ICON_URL)
+
     return data
 
 def referral_data_update(referral_data):
@@ -56,10 +58,9 @@ def referral_data_update(referral_data):
         serializer = ReferralSerializer(data=referral_data)
     
     if serializer.is_valid():
-        instance = serializer.save()
-        print("instance -- ", instance)
+        serializer.save()
     else:
-        print("Error in referral flow - ", serializer.errors)
+        logger.error("Referral create/update failed: %s", serializer.errors)
 
 
 ALLOWED_EMAIL_DOMAINS = {

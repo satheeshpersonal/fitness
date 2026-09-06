@@ -27,7 +27,7 @@ PREMIUM_TYPE_CHOICES = [
 
 PAYMENT_STATUS_CHOICES = [
         ('P', 'Pending'),
-        ('E', 'Error'),
+        ('F', 'Failed'),
         ('S', 'Success'),
     ]
 
@@ -118,6 +118,12 @@ class UserSubscriptionHistory(models.Model):
     coupon = models.CharField(max_length=50, blank=True, null=True)
     coupon_discount_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     coupon_discount_percent = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+
+    # FitPoints redeemed against this order (2 FitPoints = ₹1). A pending
+    # ('P') or successful ('S') order holds these points; a failed order
+    # frees them again — the order row is the ledger, no separate table.
+    fitpoints_redeemed = models.IntegerField(default=0)
+    fitpoints_discount_amount = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
 
     tax = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
     tax_percent = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)

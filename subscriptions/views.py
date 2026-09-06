@@ -8,74 +8,105 @@ from datetime import timedelta
 from decouple import config
 from .models import SubscriptionPlan, UserSubscriptionHistory, DicountCoupon, UserSubscription, PlanDetails, PREMIUM_TYPE_CHOICES
 from .serializers import SubscriptionHistorySerializer, SubscriptionPlanSerializer
-from .functions import get_subscription_data, razorpay_creat_order, verify_razorpay_event, redeem_free_session
+from .functions import (
+    get_subscription_data,
+    razorpay_creat_order,
+    redeem_free_session,
+    verify_payment_signature,
+    mark_order_paid,
+    send_subscription_email,
+    get_fitpoints_balance,
+)
+import json
+import razorpay
 from .plan_screen import tier_copy
 from lookups.functions import send_template_email
+from FitnessApp.utils import appcache
 from django.db.models import Prefetch
+import logging
+
+logger = logging.getLogger(__name__)
 # from django.views.decorators.csrf import csrf_exempt
 # Create your views here.
 
 
 
+def _build_plans(premim_type=None):
+    """Serialized active plans, optionally for one tier, ordered by position."""
+    filters = {"status": "A"}
+    if premim_type:
+        filters["premim_type"] = premim_type
+    qs = (
+        SubscriptionPlan.objects
+        .filter(**filters)
+        .order_by("position")
+        .prefetch_related(
+            Prefetch("plan_details", queryset=PlanDetails.objects.filter(status="A"))
+        )
+    )
+    return SubscriptionPlanSerializer(qs, many=True).data
+
+
+def _build_tiers():
+    """Tier tabs — one per premium_type that has at least one active plan."""
+    tier_labels = dict(PREMIUM_TYPE_CHOICES)
+    active_codes = set(
+        SubscriptionPlan.objects.filter(status="A").values_list("premim_type", flat=True)
+    )
+    ordered_codes = [code for code, _ in PREMIUM_TYPE_CHOICES if code in active_codes]
+    tiers = []
+    for index, code in enumerate(ordered_codes):
+        copy = tier_copy(code)
+        tiers.append({
+            "code": code,
+            "label": tier_labels.get(code, code),
+            "description": copy["description"],
+            "show_gym_link": copy["show_gym_link"],
+            "gym_link_label": copy["gym_link_label"],
+            "gym_link_url": copy["gym_link_url"],
+            "is_default": index == 0,
+        })
+    return tiers
+
+
 class PlanView(APIView):
-    """
-    Handles both POST (create) and PATCH (partial update) for CustomUser
-    """
+    """Active plans, optionally filtered by ?premim_type=. Read-through cached."""
 
     def get(self, request):
-        premim_type = request.query_params.get('premim_type', None) 
-        filters = {}
-        if premim_type:
-            filters["premim_type"] = premim_type
-
-        # plan_all = SubscriptionPlan.objects.filter(**filters, status = 'A').order_by("position")
-        plan_all = (
-            SubscriptionPlan.objects
-            .filter(**filters)
-            .prefetch_related(
-                Prefetch(
-                    "plan_details",
-                    queryset=PlanDetails.objects.filter(status="A")
-                )
-            )
-        )
-
-        plan_all_data = SubscriptionPlanSerializer(plan_all, many=True).data
-        success_data =  success_response(message=f"success", code="success", data=plan_all_data)
-        return Response(success_data, status=200)
+        premim_type = request.query_params.get("premim_type", None)
+        key = appcache.PLAN_LIST_KEY.format(code=premim_type or "all")
+        data = appcache.get_or_set(key, lambda: _build_plans(premim_type), appcache.PLAN_TTL)
+        return Response(success_response(message="success", code="success", data=data), status=200)
 
 
 class PlanTiersView(APIView):
-    """
-    Tier tabs for the Plan page (mobile ChoosePlan screen).
+    """Tier tabs for the ChoosePlan screen. Read-through cached."""
 
-    The tab list is derived from the tiers that currently have at least one
-    active plan, in PREMIUM_TYPE_CHOICES order. Per-tier copy (description text,
-    "Available gyms" link) comes from subscriptions/plan_screen.py.
+    def get(self, request):
+        data = appcache.get_or_set(appcache.PLAN_TIERS_KEY, _build_tiers, appcache.PLAN_TTL)
+        return Response(success_response(message="success", code="success", data=data), status=200)
+
+
+class PlanScreenView(APIView):
+    """
+    One call for the whole ChoosePlan screen — tier tabs plus every tier's
+    plans nested — so the app stops firing `plan-tiers` then `plan-list` and
+    switching tabs needs no further request. Fully cached.
     """
 
     def get(self, request):
-        tier_labels = dict(PREMIUM_TYPE_CHOICES)
-        active_codes = set(
-            SubscriptionPlan.objects.filter(status='A').values_list('premim_type', flat=True)
-        )
-        ordered_codes = [code for code, _ in PREMIUM_TYPE_CHOICES if code in active_codes]
+        def build():
+            tiers = _build_tiers()
+            plans_all = _build_plans()  # every active plan, one query
+            by_tier = {}
+            for p in plans_all:
+                by_tier.setdefault(p.get("premim_type"), []).append(p)
+            for t in tiers:
+                t["plans"] = by_tier.get(t["code"], [])
+            return {"tiers": tiers}
 
-        tiers = []
-        for index, code in enumerate(ordered_codes):
-            copy = tier_copy(code)
-            tiers.append({
-                "code": code,
-                "label": tier_labels.get(code, code),
-                "description": copy["description"],
-                "show_gym_link": copy["show_gym_link"],
-                "gym_link_label": copy["gym_link_label"],
-                "gym_link_url": copy["gym_link_url"],
-                "is_default": index == 0,
-            })
-
-        success_data = success_response(message="success", code="success", data=tiers)
-        return Response(success_data, status=200)
+        data = appcache.get_or_set(appcache.PLAN_SCREEN_KEY, build, appcache.PLAN_TTL)
+        return Response(success_response(message="success", code="success", data=data), status=200)
 
 
 class ValidateCoupon(APIView):
@@ -102,10 +133,18 @@ class SubscriptionView(APIView):
 
     def get(self, request):
         page_type = self.request.query_params.get('page', 'L') # L - List, P - Profile (can send only 2)
+        # SubscriptionHistorySerializer.to_representation() reads
+        # instance.plan 5 times per row — without select_related that's an
+        # extra query per row (the Profile page's payment-history widget and
+        # the full payment-history list both hit this).
         if page_type == 'P':
-            subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, payment_status__in = 'S').order_by("-created_at")[0:2]
+            # was payment_status__in='S' — a bare string happens to work
+            # with __in (Python iterates its characters) only because 'S'
+            # is a single character; written as a real list to not rely on
+            # that.
+            subscription_history = UserSubscriptionHistory.objects.select_related("plan").filter(user = request.user, payment_status__in = ['S']).order_by("-created_at")[0:2]
         else:
-            subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, payment_status__in = ['S', 'F']).order_by("-created_at")
+            subscription_history = UserSubscriptionHistory.objects.select_related("plan").filter(user = request.user, payment_status__in = ['S', 'F']).order_by("-created_at")
         subscription_history_data = SubscriptionHistorySerializer(subscription_history, many=True).data
         success_data =  success_response(message=f"success", code="success", data=subscription_history_data)
         return Response(success_data, status=200)
@@ -169,8 +208,19 @@ class SubscriptionDetailsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
-        subscription_history = UserSubscriptionHistory.objects.filter(user = request.user, order_id=order_id).first()
+        subscription_history = UserSubscriptionHistory.objects.select_related("plan").filter(user = request.user, order_id=order_id).first()
+        # Was serializing None into {} and still returning code="success", so
+        # a bad/foreign order_id gave the app a "successful" empty payload it
+        # then rendered as ₹undefined everywhere. Match patch()'s behaviour.
+        if not subscription_history:
+            error_data =  error_response(message="No orders available, Please select valid order", code="not_found", data={})
+            return Response(error_data, status=200)
         subscription_history_data = SubscriptionHistorySerializer(subscription_history).data
+        # FitPoints this order can still redeem (balance not counting the
+        # points this same order is already holding).
+        subscription_history_data["fitpoints_available"] = get_fitpoints_balance(
+            request.user, exclude_order_id=subscription_history.id
+        )
         success_data =  success_response(message=f"success", code="success", data=subscription_history_data)
         return Response(success_data, status=200)
         
@@ -197,64 +247,144 @@ class SubscriptionDetailsView(APIView):
         else:
             request_data["coupon"] = None
 
+        # Don't count the points THIS order is currently holding against its
+        # own balance while we recompute the redemption.
+        request_data["_exclude_order_id"] = subscription_history.id
+
         user_plan_data = get_subscription_data(user_data, plan_data, request_data) # get plan data with price calculation
-        
+
         user_plan_data["plan"] = plan_data.id
         user_plan_data["user"] = user_data.id
-        
-        razorpay_order_id = razorpay_creat_order(user_plan_data)
+        user_plan_data["order_id"] = subscription_history.order_id  # used as the Razorpay receipt
+
+        # An unreachable/slow Razorpay used to bubble up as an unhandled 500
+        # (or, before the client timeout was added, hang) — the "Proceed to
+        # Pay" tap just failed silently for the user. Return a clean error
+        # they can retry instead.
+        try:
+            razorpay_order_id = razorpay_creat_order(user_plan_data)
+        except Exception as e:
+            logger.exception("razorpay_creat_order error")
+            error_data =  error_response(message="Couldn't reach the payment gateway. Please try again.", code="gateway_error", data={})
+            return Response(error_data, status=200)
         user_plan_data["razorpay_order_id"] = razorpay_order_id
         serializer = SubscriptionHistorySerializer(subscription_history, data=user_plan_data, partial=True)
         if serializer.is_valid():
             serializer.save()
             response_data = serializer.data
             response_data["razorpay_key"] = config('RAZORPAY_API_KEY')
-            success_data =  success_response(message=f"Enrollment udates successfully.", code="success", data=response_data)
-            return Response(success_data, status=200) 
+            # The exact integer paise the Razorpay order was created with —
+            # the client must pass this through verbatim rather than
+            # recomputing `amount * 100` in JS (float drift => checkout
+            # rejected).
+            response_data["amount_paise"] = int(user_plan_data["total_paid"] * 100)
+            response_data["fitpoints_available"] = get_fitpoints_balance(
+                user_data, exclude_order_id=subscription_history.id
+            )
+            success_data =  success_response(message=f"Enrollment updated successfully.", code="success", data=response_data)
+            return Response(success_data, status=200)
 
         error_data =  error_response(message=serializer.errors, code="error", data={})
         return Response(error_data, status=200)
     
     
-# @csrf_exempt
-class RazorpayWebhook(APIView):
-    def post(self, request): 
-        try:    
-            razorpay_event_data = verify_razorpay_event(request)
-            print("razorpay_event_data -- ", razorpay_event_data)
-            if razorpay_event_data:
-                # Update order status
-                order = UserSubscriptionHistory.objects.filter(razorpay_order_id=razorpay_event_data["order_id"]).first()
-                if order:
-                    order.razorpay_payment_id = razorpay_event_data["payment_id"]
+class VerifyPaymentView(APIView):
+    """
+    Called by the app straight from the Razorpay Checkout success callback
+    with razorpay_order_id / razorpay_payment_id / razorpay_signature. This
+    is the primary confirmation path — the signature is checked server-side,
+    the order is marked paid and the subscription activated before the
+    success screen is shown. The webhook stays as a backup for the case
+    where the app never gets to call this (network drop, app killed).
+    """
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
-                    if razorpay_event_data["event"] == 'payment.captured':
-                        order.payment_status = 'S'
-                    elif razorpay_event_data["event"] == 'payment.failed':
-                        order.payment_status = 'F'
-                        order.error_code = razorpay_event_data["error_code"]
-                        order.error_description = razorpay_event_data["error_description"]
-                    
-                    order.save()
+    def post(self, request):
+        data = request.data
+        rzp_order_id = data.get("razorpay_order_id")
+        rzp_payment_id = data.get("razorpay_payment_id")
+        rzp_signature = data.get("razorpay_signature")
 
-                    try:
-                        if order.payment_status == 'S':
-                            emails = {"to_email":[order.user.email]} # to-email and cc-email will add as array
-                            param = {"plan_type": order.plan.plan_type_display(), "session_count":order.sessions_count, "amount":order.total_paid, "expiry_date":order.expire_on.strftime("%d %b %Y")} #all email parameters
-                            send_template_email("subscription_plan", emails, param)
-                    except Exception as e:
-                        print("The payment email error : ",e)
-                    # Add business logic here, e.g., send email
-                
-            # Handle other events as needed, e.g., payment.failed
-            else:
-                print("X-Razorpay-Signature not verified" )
-        
+        if not (rzp_order_id and rzp_payment_id and rzp_signature):
+            return Response(error_response(message="Missing payment details", code="error", data={}), status=200)
+
+        order = UserSubscriptionHistory.objects.filter(
+            razorpay_order_id=rzp_order_id, user=request.user
+        ).first()
+        if not order:
+            return Response(error_response(message="Order not found", code="not_found", data={}), status=200)
+
+        try:
+            verify_payment_signature(rzp_order_id, rzp_payment_id, rzp_signature)
         except Exception as e:
-            print("The razorpay_webhook error : ",e)
-        
-        success_data =  success_response(message=f"Webhook called successfully.", code="success", data={})
-        return Response(success_data, status=200) 
+            logger.exception("verify_payment_signature failed")
+            # Don't mark the order failed here — a webhook may still confirm a
+            # genuinely captured payment. Just refuse to activate on this
+            # unverified callback.
+            return Response(error_response(
+                message="We couldn't verify this payment. If money was deducted it will be auto-refunded, or contact support.",
+                code="verification_failed", data={},
+            ), status=200)
+
+        newly_paid = mark_order_paid(order, payment_id=rzp_payment_id, signature=rzp_signature)
+        if newly_paid:
+            send_subscription_email(order)
+
+        order.refresh_from_db()
+        return Response(success_response(
+            message="Payment verified", code="success",
+            data=SubscriptionHistorySerializer(order).data,
+        ), status=200)
+
+
+class RazorpayWebhook(APIView):
+    """
+    Backup / reconciliation path. Razorpay retries this on any non-2xx, so a
+    signature failure returns 400 (surfaces in the Razorpay dashboard and
+    gets retried) and a real event returns 200. Activation goes through the
+    same idempotent mark_order_paid() as VerifyPaymentView, so the two can
+    race without double-crediting sessions.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        signature = request.headers.get('X-Razorpay-Signature')
+        body = request.body.decode('utf-8')
+
+        try:
+            client = razorpay.Client(auth=(config('RAZORPAY_API_KEY'), config('RAZORPAY_API_SECRET')))
+            client.utility.verify_webhook_signature(body, signature, config('RAZORPAY_WEBHOOK_KEY'))
+        except Exception as e:
+            logger.exception("Razorpay webhook signature verification failed")
+            return Response({"status": "invalid signature"}, status=400)
+
+        try:
+            event = json.loads(body)
+        except Exception:
+            return Response({"status": "bad payload"}, status=400)
+
+        event_type = event.get("event")
+        payment_entity = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
+        rzp_order_id = payment_entity.get("order_id")
+
+        if event_type in ("payment.captured", "payment.failed") and rzp_order_id:
+            order = UserSubscriptionHistory.objects.filter(razorpay_order_id=rzp_order_id).first()
+            if order:
+                if event_type == "payment.captured":
+                    newly_paid = mark_order_paid(order, payment_id=payment_entity.get("id"))
+                    if newly_paid:
+                        order.refresh_from_db()
+                        send_subscription_email(order)
+                elif order.payment_status != 'S':  # payment.failed, and not already succeeded another way
+                    order.payment_status = 'F'
+                    order.razorpay_payment_id = payment_entity.get("id")
+                    order.error_code = payment_entity.get("error_code")
+                    order.error_description = payment_entity.get("error_description")
+                    order.save(update_fields=["payment_status", "razorpay_payment_id", "error_code", "error_description"])
+
+        return Response({"status": "ok"}, status=200)
         
 
 class RedeemFreeSessionView(APIView):

@@ -3,6 +3,9 @@ import smtplib
 from decouple import config
 import requests
 from threading import Thread
+import logging
+
+logger = logging.getLogger(__name__)
 
 # def send_email_smtp(subject, body, to_email, cc_email=None):
 #     email = EmailMessage(
@@ -63,13 +66,11 @@ def send_email_api(to_email, param={}, template_id=0, cc_email=None):
             timeout=10  # prevents long hanging
         )
 
-        if response.status_code == 201:
-            print("Email sent via API ")
-        else:
-            print("Brevo error ", response.text)
+        if response.status_code != 201:
+            logger.error("Brevo email failed [%s]: %s", response.status_code, response.text)
 
-    except Exception as e:
-        print("Email API failed ", e)
+    except Exception:
+        logger.exception("Email API request failed")
 
 
 def send_sms(otp, to_number):
@@ -88,15 +89,11 @@ def send_sms(otp, to_number):
     }
 
     response = requests.post(url, data=payload, headers=headers)
-    print("Status Code:", response.status_code)
     # print("Response Headers:", response.headers)
-    print("Response Text:", response.text)
-    print("Response JSON (if any):", response.json() if response.headers.get('Content-Type') == 'application/json' else "Not JSON")
 
 
 def send_template_email(template_key, emails, param):
     # send_email_smtp(subject, body, to_email, cc_email)
-    print(emails)
     cc_email = None
     template_id = 0
     if template_key == "OTP":

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import WorkoutType, ExerciseName, GymFeature
+from FitnessApp.utils.media import thumbnail_url
 
 class WorkoutTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,3 +27,12 @@ class GymFeatureSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'icon', 'details']
 
     icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
+
+    def to_representation(self, instance):
+        # Feature icons only ever render as small pills/badges (biggest use is
+        # a 20x20px icon on the gym-detail page) — every caller was getting
+        # the full-resolution original from Cloudinary for that.
+        data = super().to_representation(instance)
+        if data.get('icon'):
+            data['icon'] = thumbnail_url(data['icon'], width=80, height=80)
+        return data

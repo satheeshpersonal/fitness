@@ -5,21 +5,22 @@ from rest_framework import status, permissions, authentication
 from decouple import config
 import json
 from FitnessApp.utils.response import success_response, error_response
+from FitnessApp.utils import appcache
 from .models import WorkoutType, ExerciseName, GymFeature
 from .serializers import WorkoutTypeSerializer, ExerciseNameSerializer, GymFeatureSerializer
 
 
 # Create your views here.
 class WorkoutTypeView(APIView):
-    """
-    Handles both POST (create) and PATCH (partial update) for CustomUser
-    """
+    """Active workout types. Rarely changes → read-through cached."""
 
     def get(self, request):
-        workout_type = WorkoutType.objects.filter(status = 'A').order_by("position")
-        workout_type_data = WorkoutTypeSerializer(workout_type, many=True).data
-        success_data =  success_response(message=f"success", code="success", data=workout_type_data)
-        return Response(success_data, status=200)
+        def build():
+            qs = WorkoutType.objects.filter(status="A").order_by("position")
+            return WorkoutTypeSerializer(qs, many=True).data
+
+        data = appcache.get_or_set(appcache.WORKOUT_TYPES_KEY, build, appcache.LOOKUP_TTL)
+        return Response(success_response(message="success", code="success", data=data), status=200)
 
 
 class ExerciseNameView(APIView):
@@ -28,29 +29,31 @@ class ExerciseNameView(APIView):
     """
 
     def get(self, request):
-        workout_types = request.query_params.get('workout_types', None) 
+        workout_types = request.query_params.get('workout_types', None)
         exercise_name_data = []
         if workout_types:
-            workout_types_list = [int(wt.strip()) for wt in workout_types.split(',')]
-            exercise_name = ExerciseName.objects.filter(workout_type__in=workout_types_list, status = 'A').order_by("workout_type__position","position")
-            exercise_name_data = ExerciseNameSerializer(exercise_name, many=True).data
+            workout_types_list = []
+            for wt in workout_types.split(','):
+                wt = wt.strip()
+                if wt.isdigit():
+                    workout_types_list.append(int(wt))
+            if workout_types_list:
+                exercise_name = ExerciseName.objects.filter(workout_type__in=workout_types_list, status = 'A').order_by("workout_type__position","position")
+                exercise_name_data = ExerciseNameSerializer(exercise_name, many=True).data
         success_data =  success_response(message=f"success", code="success", data=exercise_name_data)
         return Response(success_data, status=200)
 
 
 class GymFeatureView(APIView):
-    """
-    Handles both POST (create) and PATCH (partial update) for CustomUser
-    """
+    """Active gym features. Rarely changes → read-through cached."""
 
     def get(self, request):
-        gym_feature_list = []
+        def build():
+            qs = GymFeature.objects.filter(status="A").order_by("position")
+            return GymFeatureSerializer(qs, many=True).data
 
-        gym_feature = GymFeature.objects.filter(status = 'A').order_by("position")
-        if gym_feature:
-            gym_feature_list = GymFeatureSerializer(gym_feature, many=True).data
-        success_data =  success_response(message=f"success", code="success", data=gym_feature_list)
-        return Response(success_data, status=200)
+        data = appcache.get_or_set(appcache.GYM_FEATURES_KEY, build, appcache.LOOKUP_TTL)
+        return Response(success_response(message="success", code="success", data=data), status=200)
 
 
 class AppVersionView(APIView):

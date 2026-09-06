@@ -1,27 +1,33 @@
 from rest_framework import serializers
 from .models import GymAccessLog, WorkoutSchedule, WorkoutExercise, SetGoal
+from lookups.models import WorkoutType
 from lookups.serializers import WorkoutTypeSerializer
-from accounts.functions import gym_response
+from accounts.functions import gym_response, thumbnail_url, DEFAULT_GYM_ICON_URL
 from accounts.serializers import UserDetailsSerializer
 
 class GymAccessLogSerializer(serializers.ModelSerializer):
-    # gym = serializers.SerializerMethodField()
-    user_details = UserDetailsSerializer(
-        source="user",
-        read_only=True
-    )
+    # user_details is only needed by the gym-owner screens (who checked in).
+    # The member-facing screens (their own gym logs, scan success, session
+    # details) never read it, so it's built only when a caller opts in with
+    # context={"with_user": True} — otherwise it was a nested serializer +
+    # thumbnail build on every row for data nobody rendered.
+    user_details = serializers.SerializerMethodField()
+
     class Meta:
         model = GymAccessLog
         fields = '__all__'  # include all fields
         read_only_fields = ['gym_access_id', 'access_date']  # only these are read-only
 
-    def get_gym(self, obj):
-        return gym_response(obj.gym)
-    
+    def get_user_details(self, obj):
+        if not self.context.get("with_user"):
+            return None
+        return UserDetailsSerializer(obj.user).data
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['gym'] =  gym_response(instance.gym)
-        # data['user_details'] = UserDetailsSerializer(instance.user).data
+        if not self.context.get("with_user"):
+            data.pop("user_details", None)
         return data
     
 
@@ -43,15 +49,29 @@ class WorkoutExerciseSerializer(serializers.ModelSerializer):
 
 
 class WorkoutScheduleSerializer(serializers.ModelSerializer):
-    workout_type = WorkoutTypeSerializer(many=True, read_only=True)
-    # exercise = serializers.SerializerMethodField()
+    # Was WorkoutTypeSerializer(many=True, read_only=True) — read_only meant
+    # whatever "workout_type" the app sent was silently dropped by is_valid(),
+    # so the muscles picked on the Schedule Workout screen never reached the
+    # DB. PrimaryKeyRelatedField accepts a plain list of ids (what the app
+    # sends) and DRF's ModelSerializer.create()/update() calls .set() on the
+    # M2M automatically; to_representation() below still returns full
+    # {id, name, ...} objects for reads.
+    workout_type = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=WorkoutType.objects.all(), required=False
+    )
     gym = serializers.SerializerMethodField()
+    # A workout with no gym attached previously left the app with nothing to
+    # put in the <img src>. gym_icon is always populated — the real gym's
+    # icon (or the shared default if that gym has none), or the shared
+    # default outright when there's no gym at all — so the frontend never
+    # needs its own fallback/placeholder logic.
+    gym_icon = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkoutSchedule
         fields = '__all__'  # include all fields
         read_only_fields = ['created_at', 'updated_at']  # only these are read-only
-    
+
     exercise = WorkoutExerciseSerializer(
         source="exercises",
         many=True,
@@ -64,18 +84,17 @@ class WorkoutScheduleSerializer(serializers.ModelSerializer):
 
         return None
 
-    # def to_representation(self, instance):
-    #     data = super().to_representation(instance)
-    #     workout_types = instance.workout_type.all()
-    #     data['workout_type'] =  WorkoutTypeSerializer(workout_types, many=True).data
+    def get_gym_icon(self, obj):
+        if obj.gym:
+            return gym_response(obj.gym)['profile_icon']
 
-    #     exercise_all = WorkoutExercise.objects.filter(workout_schedule=instance.id, status = 'A').order_by("created_at")
-    #     data['exercise'] = WorkoutExerciseSerializer(exercise_all, many=True).data
+        return thumbnail_url(DEFAULT_GYM_ICON_URL)
 
-    #     if instance.gym:
-    #         data['gym'] =  gym_response(instance.gym)
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['workout_type'] = WorkoutTypeSerializer(instance.workout_type.all(), many=True).data
 
-    #     return data
+        return data
     
 
 class SetGoalSerializer(serializers.ModelSerializer):

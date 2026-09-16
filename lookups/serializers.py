@@ -1,5 +1,6 @@
+import re
 from rest_framework import serializers
-from .models import WorkoutType, ExerciseName, GymFeature
+from .models import WorkoutType, ExerciseName, GymFeature, ContactMessage, PartnerLead
 from FitnessApp.utils.media import thumbnail_url
 
 class WorkoutTypeSerializer(serializers.ModelSerializer):
@@ -36,3 +37,64 @@ class GymFeatureSerializer(serializers.ModelSerializer):
         if data.get('icon'):
             data['icon'] = thumbnail_url(data['icon'], width=80, height=80)
         return data
+
+
+def _clean_mobile(value):
+    digits = re.sub(r'\D', '', value or '')
+    if digits.startswith('91') and len(digits) == 12:
+        digits = digits[2:]
+    if len(digits) != 10 or digits[0] not in '6789':
+        raise serializers.ValidationError("Enter a valid 10-digit mobile number.")
+    return digits
+
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = ['name', 'email', 'phone', 'category', 'message']
+
+    def validate_name(self, value):
+        value = (value or '').strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("Please enter your name.")
+        return value
+
+    def validate_message(self, value):
+        value = (value or '').strip()
+        if len(value) < 10:
+            raise serializers.ValidationError("Please add a few more details (at least 10 characters).")
+        return value[:5000]
+
+    def validate_phone(self, value):
+        value = (value or '').strip()
+        return value[:20]
+
+
+class PartnerLeadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PartnerLead
+        fields = ['gym_name', 'owner_name', 'mobile', 'email', 'city', 'message']
+
+    def validate_gym_name(self, value):
+        value = (value or '').strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("Please enter your gym's name.")
+        return value
+
+    def validate_owner_name(self, value):
+        value = (value or '').strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("Please enter the owner's name.")
+        return value
+
+    def validate_city(self, value):
+        value = (value or '').strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("Please enter your city.")
+        return value
+
+    def validate_mobile(self, value):
+        return _clean_mobile(value)
+
+    def validate_message(self, value):
+        return (value or '').strip()[:5000]

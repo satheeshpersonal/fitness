@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite, Referral
+from .models import CustomUser, UserSelectLocation, GymMedia, GymEquipment, Gym, GymTiming, GymReview, GymFavorite, Referral, PREMIUM_TYPE_CHOICES
 from lookups.models import GymFeature
 from lookups.serializers import GymFeatureSerializer
 from FitnessApp.utils.media import thumbnail_url, DEFAULT_PROFILE_ICON_URL
@@ -458,10 +458,30 @@ class GymDetailsSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
+    # Which membership plans unlock this gym. Access is tiered: a Basic gym is
+    # reachable on every plan, a VIP gym on VIP + Elite, an Elite gym on Elite
+    # only. The end user never pays `per_session_cost` directly — that's the
+    # gym's own drop-in rate — so the app shows this note instead of a price.
+    access = serializers.SerializerMethodField()
+
     class Meta:
         model = Gym
-        fields = ['id', 'gym_id', 'profile_icon', 'name', 'description', 'address', 'city', 'state', 'country', 'zip_code', 'latitude', 'longitude', 'premium_type', 'media', 'feature', 'equipment', 'gymtiming', 'gymowner', 'status', 'per_session_cost', 'currency' #distance_km, 'rating'
+        fields = ['id', 'gym_id', 'profile_icon', 'name', 'description', 'address', 'city', 'state', 'country', 'zip_code', 'latitude', 'longitude', 'premium_type', 'access', 'media', 'feature', 'equipment', 'gymtiming', 'gymowner', 'status', 'per_session_cost', 'currency' #distance_km, 'rating'
         ]
+
+    def get_access(self, obj):
+        labels = dict(PREMIUM_TYPE_CHOICES)
+        notes = {
+            "B": "Included with any Fitzz plan",
+            "V": "Available on VIP and Elite plans",
+            "E": "Available on the Elite plan",
+        }
+        code = obj.premium_type or "B"
+        return {
+            "tier": code,
+            "tier_label": labels.get(code, code),
+            "note": notes.get(code, ""),
+        }
 
     # profile_icon = serializers.ImageField(use_url=True, required=False, allow_null=True)
 
